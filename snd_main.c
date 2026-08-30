@@ -1955,8 +1955,13 @@ static void S_PaintAndSubmit (void)
 
 	// mixing is always required here when capturing, even if output is muted
 	// (capture doesn't use threaded/callback mode)
+#ifdef CONFIG_VIDEO_CAPTURE
 	if (!soundtimehack && snd_blocked && !cls.capturevideo.active)
 		return;
+#else
+	if (!soundtimehack && snd_blocked)
+		return;
+#endif
 
 	if (snd_usethreadedmixing)
 		return; // the audio thread will mix its own data

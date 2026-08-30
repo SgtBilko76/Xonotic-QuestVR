@@ -823,6 +823,27 @@ void GL_Setup(void)
 	vid.renderpath = RENDERPATH_GLES2;
 	vid.sRGBcapable2D = false;
 	vid.sRGBcapable3D = false;
+	// On an ES 3.x context (see vid_sdl.c) NPOT textures with mipmaps and 3D textures are core,
+	// without an extension string; DP would otherwise try to "stretch" uploads and reject 3D ones
+	// (the Q3BSP lightgrid is a non-power-of-two 3D texture).
+	if (gl_version && strncmp(gl_version, "OpenGL ES 3", 11) == 0)
+	{
+#ifndef GL_MAX_3D_TEXTURE_SIZE
+#define GL_MAX_3D_TEXTURE_SIZE 0x8073
+#endif
+		if (!vid.maxtexturesize_3d)
+		{
+			qglGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, (GLint*)&vid.maxtexturesize_3d);
+			CHECKGLERROR
+		}
+		// cubemaps are core in GLES too (no GL_ARB_texture_cube_map string to detect)
+		if (!vid.maxtexturesize_cubemap)
+		{
+			qglGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, (GLint*)&vid.maxtexturesize_cubemap);
+			CHECKGLERROR
+		}
+		Con_Printf("GLES3 context: GL_MAX_3D_TEXTURE_SIZE = %i, GL_MAX_CUBE_MAP_TEXTURE_SIZE = %i\n", vid.maxtexturesize_3d, vid.maxtexturesize_cubemap);
+	}
 #else
 	Con_Print("Using GL32 rendering path\n");
 	vid.renderpath = RENDERPATH_GL32;

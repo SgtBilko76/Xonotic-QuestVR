@@ -104,9 +104,15 @@ static textypeinfo_t textype_rgba                        = {"rgba",             
 static textypeinfo_t textype_rgba_alpha                  = {"rgba_alpha",               TEXTYPE_RGBA          ,  4,  4,  4.0f, GL_RGBA                               , GL_RGBA           , GL_UNSIGNED_BYTE };
 static textypeinfo_t textype_bgra                        = {"bgra",                     TEXTYPE_BGRA          ,  4,  4,  4.0f, GL_RGBA                               , GL_BGRA           , GL_UNSIGNED_BYTE };
 static textypeinfo_t textype_bgra_alpha                  = {"bgra_alpha",               TEXTYPE_BGRA          ,  4,  4,  4.0f, GL_RGBA                               , GL_BGRA           , GL_UNSIGNED_BYTE };
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && !defined(VR_QUEST)
 static textypeinfo_t textype_etc1                        = {"etc1",                     TEXTYPE_ETC1          ,  1,  3,  0.5f, GL_ETC1_RGB8_OES                         , 0                 , 0                };
 #endif
+// DXT formats: uploaded natively when GL_EXT_texture_compression_s3tc is present, otherwise
+// software-decoded (r_texture_dds_swdecode) - Xonotic's release pk3s are DDS-only.
+static textypeinfo_t textype_dxt1                        = {"dxt1",                     TEXTYPE_DXT1          ,  4,  0,  0.5f, GL_COMPRESSED_RGB_S3TC_DXT1_EXT       , 0                 , 0                };
+static textypeinfo_t textype_dxt1a                       = {"dxt1a",                    TEXTYPE_DXT1A         ,  4,  0,  0.5f, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT      , 0                 , 0                };
+static textypeinfo_t textype_dxt3                        = {"dxt3",                     TEXTYPE_DXT3          ,  4,  0,  1.0f, GL_COMPRESSED_RGBA_S3TC_DXT3_EXT      , 0                 , 0                };
+static textypeinfo_t textype_dxt5                        = {"dxt5",                     TEXTYPE_DXT5          ,  4,  0,  1.0f, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT      , 0                 , 0                };
 #else
 // framebuffer texture formats
 static textypeinfo_t textype_shadowmap16_comp            = {"shadowmap16_comp",         TEXTYPE_SHADOWMAP16_COMP     ,  2,  2,  2.0f, GL_DEPTH_COMPONENT16              , GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT};
@@ -260,9 +266,13 @@ static textypeinfo_t *R_GetTexTypeInfo(textype_t textype, int flags)
 	case TEXTYPE_PALETTE: return (flags & TEXF_ALPHA) ? &textype_palette_alpha : &textype_palette;
 	case TEXTYPE_RGBA: return ((flags & TEXF_ALPHA) ? &textype_rgba_alpha : &textype_rgba);
 	case TEXTYPE_BGRA: return ((flags & TEXF_ALPHA) ? &textype_bgra_alpha : &textype_bgra);
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && !defined(VR_QUEST)
 	case TEXTYPE_ETC1: return &textype_etc1;
 #endif
+	case TEXTYPE_DXT1: return &textype_dxt1;
+	case TEXTYPE_DXT1A: return &textype_dxt1a;
+	case TEXTYPE_DXT3: return &textype_dxt3;
+	case TEXTYPE_DXT5: return &textype_dxt5;
 	case TEXTYPE_ALPHA: return &textype_alpha;
 	case TEXTYPE_COLORBUFFER: return &textype_colorbuffer;
 	case TEXTYPE_COLORBUFFER16F: return &textype_colorbuffer16f;
@@ -1561,7 +1571,7 @@ int R_SaveTextureDDSFile(rtexture_t *rt, const char *filename, qbool skipuncompr
 #endif
 }
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && !defined(VR_QUEST)
 // ELUAN: FIXME: separate this code
 #include "ktx10/include/ktx.h"
 #endif
@@ -1586,7 +1596,7 @@ rtexture_t *R_LoadTextureDDSFile(rtexturepool_t *rtexturepool, const char *filen
 	fs_offset_t ddsfilesize;
 	unsigned int ddssize;
 	qbool force_swdecode;
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && !defined(VR_QUEST)
 	// ELUAN: FIXME: separate this code
 	char vabuf[1024];
 	char vabuf2[1024];
@@ -1597,7 +1607,7 @@ rtexture_t *R_LoadTextureDDSFile(rtexturepool_t *rtexturepool, const char *filen
 	if (cls.state == ca_dedicated)
 		return NULL;
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && !defined(VR_QUEST)
 	// ELUAN: FIXME: separate this code
 	if (vid.renderpath != RENDERPATH_GLES2)
 	{

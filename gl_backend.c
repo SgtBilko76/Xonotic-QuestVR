@@ -77,6 +77,7 @@ void GL_PrintError(GLenum errornumber, const char *filename, unsigned int linenu
 }
 #endif // DEBUGGL
 
+#ifndef USE_GLES2
 static void GLAPIENTRY GL_DebugOutputCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const GLvoid* userParam)
 {
 	const char *sev = "ENUM?", *typ = "ENUM?", *src = "ENUM?", *col = "";
@@ -106,6 +107,7 @@ static void GLAPIENTRY GL_DebugOutputCallback(GLenum source, GLenum type, GLuint
 	}
 	Con_Printf("gl_debug: %s%s %s %s: %u: %s\n", col, sev, typ, src, (unsigned int)id, message);
 }
+#endif // USE_GLES2
 
 #define BACKENDACTIVECHECK if (!gl_state.active) Sys_Error("GL backend function called when backend is not active");
 
@@ -1097,6 +1099,7 @@ static void GL_Backend_ResetState(void)
 	case RENDERPATH_GL32:
 	case RENDERPATH_GLES2:
 		// set up debug output early
+#ifndef USE_GLES2
 		if (gl_debug.integer > 0 && vid.support.arb_debug_output)
 		{
 			GLuint unused = 0;
@@ -1116,6 +1119,7 @@ static void GL_Backend_ResetState(void)
 				qglDebugMessageControlARB(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, &unused, GL_FALSE);
 			qglDebugMessageCallbackARB(GL_DebugOutputCallback, NULL);
 		}
+#endif // USE_GLES2
 		CHECKGLERROR
 		qglColorMask(1, 1, 1, 1);CHECKGLERROR
 		qglBlendFunc(gl_state.blendfunc1, gl_state.blendfunc2);CHECKGLERROR
@@ -1510,10 +1514,14 @@ void GL_ReadPixelsBGRA(int x, int y, int width, int height, unsigned char *outpi
 {
 	switch(vid.renderpath)
 	{
+#ifndef USE_GLES2
 	case RENDERPATH_GL32:
 		CHECKGLERROR
 		qglReadPixels(x, y, width, height, GL_BGRA, GL_UNSIGNED_BYTE, outpixels);CHECKGLERROR
 		break;
+#else
+	case RENDERPATH_GL32:
+#endif
 	case RENDERPATH_GLES2: // glReadPixels() lacks GL_BGRA support (even in ES 3.2)
 		CHECKGLERROR
 		{

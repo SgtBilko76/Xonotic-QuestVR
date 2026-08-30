@@ -1720,7 +1720,7 @@ static qbool VID_InitModeGL(const viddef_mode_t *mode)
 
 #ifdef DP_MOBILETOUCH
 	// mobile platforms are always fullscreen, we'll get the resolution after opening the window
-	mode->fullscreen = true;
+	((viddef_mode_t *)mode)->fullscreen = true;
 	// hide the menu with SDL_WINDOW_BORDERLESS
 	windowflags |= SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS;
 #endif
@@ -1774,8 +1774,15 @@ static qbool VID_InitModeGL(const viddef_mode_t *mode)
 
 #ifdef USE_GLES2
 	SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#ifdef VR_QUEST
+	// OpenXR GLES swapchains and GL_EXT_multisampled_render_to_texture need an ES 3.x context;
+	// the RENDERPATH_GLES2 code runs unchanged on it (ES3 is a superset).
+	SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#else
 	SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
 #else
 	SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);

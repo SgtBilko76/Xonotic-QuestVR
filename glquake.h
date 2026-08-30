@@ -5,6 +5,9 @@
 
 #ifdef USE_GLES2
 #include <SDL_opengles2.h>
+#ifndef GLAPIENTRY
+#define GLAPIENTRY GL_APIENTRY
+#endif
 #else
 //#include <SDL_opengl.h>
 //#include <SDL_opengl_glext.h>
