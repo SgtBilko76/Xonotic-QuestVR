@@ -272,6 +272,13 @@ void V_ParseDamage (void)
 	armor = MSG_ReadByte(&cl_message);
 	blood = MSG_ReadByte(&cl_message);
 	MSG_ReadVector(&cl_message, from, cls.protocol);
+#ifdef VR_QUEST
+	{
+		float str = bound(0.25f, (armor + blood) / 40.0f, 1.0f);
+		VRH_Vibrate(0, 150, str);
+		VRH_Vibrate(1, 150, str);
+	}
+#endif
 
 	// Send the Dmg Globals to CSQC
 	CL_VM_UpdateDmgGlobals(blood, armor, from);
