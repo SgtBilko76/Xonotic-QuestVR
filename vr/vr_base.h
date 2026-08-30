@@ -115,6 +115,7 @@ void VR_LeaveVR( engine_t* engine );
 bool VR_GetPlatformFlag(enum VRPlatformFlag flag);
 void VR_SetPlatformFLag(enum VRPlatformFlag flag, bool value);
 bool VR_HasCylinderLayerExt(void);
+bool VR_HasFoveationExt(void);
 
 /* vr_framebuffer.c */
 void ovrApp_Clear(ovrApp* app);

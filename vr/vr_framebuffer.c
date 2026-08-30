@@ -115,8 +115,15 @@ bool ovrFramebuffer_Create(
 					"glFramebufferTextureMultisampleMultiviewOVR");
 
 	XrSwapchainCreateInfo swapChainCreateInfo;
+	XrSwapchainCreateInfoFoveationFB swapChainFoveationCreateInfo;
 	memset(&swapChainCreateInfo, 0, sizeof(swapChainCreateInfo));
 	swapChainCreateInfo.type = XR_TYPE_SWAPCHAIN_CREATE_INFO;
+	if (VR_HasFoveationExt()) {
+		memset(&swapChainFoveationCreateInfo, 0, sizeof(swapChainFoveationCreateInfo));
+		swapChainFoveationCreateInfo.type = XR_TYPE_SWAPCHAIN_CREATE_INFO_FOVEATION_FB;
+		swapChainFoveationCreateInfo.flags = XR_SWAPCHAIN_CREATE_FOVEATION_SCALED_BIN_BIT_FB;
+		swapChainCreateInfo.next = &swapChainFoveationCreateInfo;
+	}
 	swapChainCreateInfo.sampleCount = multisamples;
 	swapChainCreateInfo.width = width;
 	swapChainCreateInfo.height = height;

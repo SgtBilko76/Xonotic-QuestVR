@@ -9,6 +9,7 @@ enum VRConfig {
 	VR_CONFIG_MOUSE_SIZE, VR_CONFIG_MOUSE_X, VR_CONFIG_MOUSE_Y,
 	VR_CONFIG_VIEWPORT_WIDTH, VR_CONFIG_VIEWPORT_HEIGHT, VR_CONFIG_VIEWPORT_MSAA,
 	VR_CONFIG_SCREEN_WIDTH, VR_CONFIG_SCREEN_HEIGHT,   /* sub-rect of eye buffer 0 used in screen mode */
+	VR_CONFIG_FOVEATION_LEVEL,                          /* 0 off .. 3 high (XR_FB_foveation) */
 	VR_CONFIG_MAX
 };
 

@@ -44,6 +44,7 @@ cvar_t vr_supersampling = {CF_CLIENT | CF_ARCHIVE, "vr_supersampling", "1.0", "e
 cvar_t vr_viewkick = {CF_CLIENT | CF_ARCHIVE, "vr_viewkick", "0", "scale of damage/weapon kick applied to the headset view (0 = none)"};
 cvar_t vr_haptics = {CF_CLIENT | CF_ARCHIVE, "vr_haptics", "1", "controller vibration"};
 cvar_t vr_thumbstick_deadzone = {CF_CLIENT | CF_ARCHIVE, "vr_thumbstick_deadzone", "0.15", "thumbstick dead zone"};
+cvar_t vr_foveation = {CF_CLIENT | CF_ARCHIVE, "vr_foveation", "2", "fixed foveated rendering level: 0 off, 1 low, 2 medium, 3 high (applied at startup)"};
 cvar_t vr_keyboard = {CF_CLIENT | CF_ARCHIVE, "vr_keyboard", "0", "enable the thumbstick grid keyboard (Y in menus/chat)"};
 cvar_t vr_menu_pointer_scale = {CF_CLIENT | CF_ARCHIVE, "vr_menu_pointer_scale", "1.0", "sensitivity of the laser pointer on the menu screen"};
 
@@ -179,6 +180,7 @@ void VRH_RegisterCvars(void)
 	Cvar_RegisterVariable(&vr_thumbstick_deadzone);
 	Cvar_RegisterVariable(&vr_menu_pointer_scale);
 	Cvar_RegisterVariable(&vr_keyboard);
+	Cvar_RegisterVariable(&vr_foveation);
 	R_LaserSights_Init();
 }
 
@@ -218,6 +220,7 @@ void VRH_Init(void)
 	VR_SetConfig(VR_CONFIG_VIEWPORT_MSAA, bound(1, vr_msaa.integer, 4));
 	VR_SetConfigFloat(VR_CONFIG_VIEWPORT_SUPERSAMPLING, bound(0.5f, vr_supersampling.value, 2.0f));
 	VR_SetConfigFloat(VR_CONFIG_CANVAS_DISTANCE, vr_screen_distance.value);
+	VR_SetConfig(VR_CONFIG_FOVEATION_LEVEL, bound(0, vr_foveation.integer, 3));
 	VR_InitRenderer(engine, false);
 	if (vr_refreshrate.integer > 0)
 		VR_SetRefreshRate(vr_refreshrate.integer);
