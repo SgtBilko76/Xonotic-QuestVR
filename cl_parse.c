@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cl_parse.c  -- parse a message received from the server
 
 #include "quakedef.h"
+#include "vr/vr_api.h"
 #include "cdaudio.h"
 #include "cl_collision.h"
 #include "csprogs.h"
@@ -3992,6 +3993,11 @@ void CL_ParseServerMessage(void)
 			case svc_setangle:
 				for (i=0 ; i<3 ; i++)
 					cl.viewangles[i] = MSG_ReadAngle(&cl_message, cls.protocol);
+#ifdef VR_QUEST
+				// the headset owns the view: honour spawn/teleport angles by rotating the
+				// artificial yaw so the player ends up facing the server's direction
+				VRH_ServerSetAngles(cl.viewangles);
+#endif
 				if (!cls.demoplayback)
 				{
 					cl.fixangle[0] = true;

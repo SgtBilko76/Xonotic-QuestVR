@@ -496,6 +496,14 @@ void VRH_AddYaw(float degrees)
 	vrh_yawoffset = ANGLEMOD(vrh_yawoffset + degrees);
 }
 
+void VRH_ServerSetAngles(const float angles[3])
+{
+	if (!vrh_session)
+		return;
+	// make (hmd yaw + offset) equal the server's requested yaw; pitch/roll stay with the headset
+	vrh_yawoffset = ANGLEMOD(angles[YAW] - vrh_hmdangles[YAW]);
+}
+
 bool VRH_HasGun(void)
 {
 	return vrh_session && vrh_gunvalid;
