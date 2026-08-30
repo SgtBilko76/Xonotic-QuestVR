@@ -35,7 +35,7 @@ bool  VRH_GetHudRect(int *x, int *y, int *w, int *h);   /* 2D canvas rect for th
 bool  VRH_ScreenMode(void);         /* true: menu/console/loading -> mono render on a flat layer */
 
 /* ---- view / projection ---- */
-void  VRH_GetEyeOffset(int eye, float out_quake[3]);           /* eye pos relative to head, Quake units */
+void  VRH_GetEyeOffset(int eye, float out_quake[3], float out_angles[3]); /* eye pose relative to the head: Quake units / Quake angles */
 void  VRH_GetProjection(int eye, float znear, float zfar, float m16[16]);
 void  VRH_GetUnionFovTangents(float *tanx, float *tany);
 void  VRH_GetHMDAngles(float out_pitch_yaw_roll[3]);           /* Quake angles incl. artificial yaw */

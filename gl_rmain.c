@@ -5666,11 +5666,11 @@ void R_RenderView(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture, i
 #ifdef VR_QUEST
 	if (VRH_Available() && !VRH_ScreenMode())
 	{
-		vec3_t eyeoff;
+		vec3_t eyeoff, eyeang;
 		float tx, ty;
-		// per-eye offset from the head (view-local, Quake units)
-		VRH_GetEyeOffset(r_stereo_side, eyeoff);
-		Matrix4x4_CreateFromQuakeEntity(&offsetmatrix, eyeoff[0], eyeoff[1], eyeoff[2], 0, 0, 0, 1);
+		// per-eye pose relative to the head (view-local: position in Quake units, canted rotation)
+		VRH_GetEyeOffset(r_stereo_side, eyeoff, eyeang);
+		Matrix4x4_CreateFromQuakeEntity(&offsetmatrix, eyeoff[0], eyeoff[1], eyeoff[2], eyeang[0], eyeang[1], eyeang[2], 1);
 		Matrix4x4_Concat(&r_refdef.view.matrix, &originalmatrix, &offsetmatrix);
 		// cull with the union of both eyes' fov (the projection itself is asymmetric per eye)
 		VRH_GetUnionFovTangents(&tx, &ty);

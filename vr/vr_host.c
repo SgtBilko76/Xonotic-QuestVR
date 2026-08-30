@@ -62,6 +62,8 @@ static float vrh_recenter_xr[3];       /* stage-space head position at the last 
 static float vrh_playerheight = 0;     /* stage-space head height at the last recenter */
 static bool vrh_needcalibrate = true;
 static float vrh_eyeoffset[2][3];      /* per-eye offset from the head, Quake units */
+static float vrh_eyeangles[2][3];      /* per-eye rotation relative to the head (canted displays), Quake angles */
+static bool vrh_eyeangles_logged = false;
 static float vrh_gunrel[3];            /* hand position relative to the head, world Quake units */
 static bool vrh_gunvalid = false;
 
@@ -282,6 +284,21 @@ static void VRH_UpdatePoses(void)
 		XrVector3f local = XrQuaternionf_Rotate(XrQuaternionf_Inverse(head.orientation), d);
 		float l[3] = { local.x, local.y, local.z };
 		XrToQuake(l, vrh_eyeoffset[eye], ws);
+		// eye orientation relative to the head (Quest 3 views are canted outwards)
+		{
+			XrQuaternionf rel = XrQuaternionf_Multiply(XrQuaternionf_Inverse(head.orientation), view.orientation);
+			XrVector3f ea = XrQuaternionf_ToEulerAngles(rel);
+			vrh_eyeangles[eye][PITCH] = ea.x;
+			vrh_eyeangles[eye][YAW] = ea.y;
+			vrh_eyeangles[eye][ROLL] = ea.z;
+		}
+	}
+	if (!vrh_eyeangles_logged && VR_HeadTracked())
+	{
+		vrh_eyeangles_logged = true;
+		VRH_Log("eye offsets L(%.2f %.2f %.2f) R(%.2f %.2f %.2f) units, eye cant yaw L %.2f R %.2f deg",
+			vrh_eyeoffset[0][0], vrh_eyeoffset[0][1], vrh_eyeoffset[0][2], vrh_eyeoffset[1][0], vrh_eyeoffset[1][1], vrh_eyeoffset[1][2],
+			vrh_eyeangles[0][YAW], vrh_eyeangles[1][YAW]);
 	}
 
 	// weapon hand
@@ -385,9 +402,11 @@ void VRH_SubmitFrame(void)
 
 /* ---------------------------------------------------------------- view */
 
-void VRH_GetEyeOffset(int eye, float out[3])
+void VRH_GetEyeOffset(int eye, float out[3], float out_angles[3])
 {
-	VectorScale(vrh_eyeoffset[bound(0, eye, 1)], vr_eyeseparation.value, out);
+	eye = bound(0, eye, 1);
+	VectorScale(vrh_eyeoffset[eye], vr_eyeseparation.value, out);
+	VectorCopy(vrh_eyeangles[eye], out_angles);
 }
 
 void VRH_GetProjection(int eye, float znear, float zfar, float m16[16])
