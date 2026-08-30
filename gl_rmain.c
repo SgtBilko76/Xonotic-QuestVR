@@ -5977,6 +5977,9 @@ void R_RenderScene(int viewfbo, rtexture_t *viewdepthtexture, rtexture_t *viewco
 				R_TimeReport("portals");
 		}
 
+#ifdef VR_QUEST
+		R_DrawLaserSights();
+#endif
 		if (r_showbboxes_client.value > 0)
 		{
 			R_DrawEntityBBoxes(CLVM_prog);
