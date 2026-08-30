@@ -372,16 +372,24 @@ void VRH_GetEyeResolution(int *width, int *height)
 
 bool VRH_GetHudRect(int *x, int *y, int *w, int *h)
 {
-	float scale, shift;
+	float scale, shift, tl, tr, tu, td, cxfrac, cyfrac_top;
+	XrFovf fov;
 	if (!vrh_session || vrh_screenmode)
 		return false;
 	scale = bound(0.2f, vr_hudscale.value, 1.0f);
 	shift = bound(-0.1f, vr_hudstereo.value, 0.1f) * vid.mode.width;
 	*w = (int)(vid.mode.width * scale);
 	*h = (int)(vid.mode.height * scale);
-	// converge: left eye's canvas shifted right, right eye's shifted left
-	*x = (vid.mode.width - *w) / 2 + (int)(r_stereo_side == 0 ? shift : -shift);
-	*y = (vid.mode.height - *h) / 2;
+	// Each eye's fov is asymmetric, so the same pixel points in different directions per eye.
+	// Centre the canvas on this eye's straight-ahead direction so the HUD fuses between the eyes.
+	fov = VR_GetFov(bound(0, r_stereo_side, 1));
+	tl = tanf(fov.angleLeft); tr = tanf(fov.angleRight);
+	td = tanf(fov.angleDown); tu = tanf(fov.angleUp);
+	cxfrac = (0.0f - tl) / (tr - tl);          /* fraction from the left edge */
+	cyfrac_top = tu / (tu - td);               /* fraction from the top edge */
+	// converge slightly on top: left eye's canvas shifted right, right eye's shifted left
+	*x = (int)(cxfrac * vid.mode.width) - *w / 2 + (int)(r_stereo_side == 0 ? shift : -shift);
+	*y = (int)(cyfrac_top * vid.mode.height) - *h / 2;
 	return true;
 }
 
