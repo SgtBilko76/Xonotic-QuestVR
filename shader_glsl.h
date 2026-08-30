@@ -47,9 +47,11 @@
 "invariant gl_Position; // fix for lighting polygons not matching base surface\n",
 "# endif\n",
 #ifdef USE_GLES2
+"#extension GL_OES_texture_3D : enable\n",
 "precision highp float;\n",
 #endif
 "#if defined(GLSL130) || defined(GLSL140)\n",
+"#extension GL_OES_texture_3D : enable\n",
 "precision highp float;\n",
 "# ifdef VERTEX_SHADER\n",
 "#  define dp_varying out\n",
