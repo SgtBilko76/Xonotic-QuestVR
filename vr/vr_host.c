@@ -32,6 +32,7 @@ cvar_t cl_comfort = {CF_CLIENT | CF_ARCHIVE, "cl_comfort", "45", "snap turn angl
 cvar_t vr_turnspeed = {CF_CLIENT | CF_ARCHIVE, "vr_turnspeed", "120", "smooth turn speed in degrees per second"};
 cvar_t cl_walkdirection = {CF_CLIENT | CF_ARCHIVE, "cl_walkdirection", "0", "0: thumbstick movement is relative to the head, 1: relative to the off-hand controller"};
 cvar_t cl_righthanded = {CF_CLIENT | CF_ARCHIVE, "cl_righthanded", "1", "1: aim with the right controller, 0: aim with the left"};
+cvar_t vr_eyeseparation = {CF_CLIENT | CF_ARCHIVE, "vr_eyeseparation", "1", "multiplier for the per-eye camera offset (1 normal, 0 mono, -1 mirrored - for debugging)"};
 cvar_t vr_6dof = {CF_CLIENT | CF_ARCHIVE, "vr_6dof", "1", "apply positional head tracking to the view"};
 cvar_t vr_hudscale = {CF_CLIENT | CF_ARCHIVE, "vr_hudscale", "0.55", "size of the 2D HUD canvas relative to the eye buffer"};
 cvar_t vr_hudstereo = {CF_CLIENT | CF_ARCHIVE, "vr_hudstereo", "0.006", "per-eye horizontal HUD shift (fraction of width) that sets the HUD depth"};
@@ -104,7 +105,7 @@ static int vrh_gldebug_count = 0;
 static void GL_APIENTRY VRH_GLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam)
 {
 	(void)source; (void)id; (void)length; (void)userParam;
-	if (severity == GL_DEBUG_SEVERITY_NOTIFICATION_KHR)
+	if (type != GL_DEBUG_TYPE_ERROR_KHR && type != GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR_KHR)
 		return;
 	if (vrh_gldebug_count++ < 200)
 		__android_log_print(ANDROID_LOG_WARN, "XonoticGL", "type %x severity %x: %s", type, severity, message);
@@ -162,6 +163,7 @@ void VRH_RegisterCvars(void)
 	Cvar_RegisterVariable(&cl_walkdirection);
 	Cvar_RegisterVariable(&cl_righthanded);
 	Cvar_RegisterVariable(&vr_6dof);
+	Cvar_RegisterVariable(&vr_eyeseparation);
 	Cvar_RegisterVariable(&vr_hudscale);
 	Cvar_RegisterVariable(&vr_hudstereo);
 	Cvar_RegisterVariable(&vr_screen_distance);
@@ -385,7 +387,7 @@ void VRH_SubmitFrame(void)
 
 void VRH_GetEyeOffset(int eye, float out[3])
 {
-	VectorCopy(vrh_eyeoffset[bound(0, eye, 1)], out);
+	VectorScale(vrh_eyeoffset[bound(0, eye, 1)], vr_eyeseparation.value, out);
 }
 
 void VRH_GetProjection(int eye, float znear, float zfar, float m16[16])
