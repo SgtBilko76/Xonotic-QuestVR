@@ -44,6 +44,7 @@ cvar_t vr_supersampling = {CF_CLIENT | CF_ARCHIVE, "vr_supersampling", "1.0", "e
 cvar_t vr_viewkick = {CF_CLIENT | CF_ARCHIVE, "vr_viewkick", "0", "scale of damage/weapon kick applied to the headset view (0 = none)"};
 cvar_t vr_haptics = {CF_CLIENT | CF_ARCHIVE, "vr_haptics", "1", "controller vibration"};
 cvar_t vr_thumbstick_deadzone = {CF_CLIENT | CF_ARCHIVE, "vr_thumbstick_deadzone", "0.15", "thumbstick dead zone"};
+cvar_t vr_keyboard = {CF_CLIENT | CF_ARCHIVE, "vr_keyboard", "0", "enable the thumbstick grid keyboard (Y in menus/chat)"};
 cvar_t vr_menu_pointer_scale = {CF_CLIENT | CF_ARCHIVE, "vr_menu_pointer_scale", "1.0", "sensitivity of the laser pointer on the menu screen"};
 
 /* world-space aim of the weapon hand (engine reads these, see vr_api.h) */
@@ -177,6 +178,7 @@ void VRH_RegisterCvars(void)
 	Cvar_RegisterVariable(&vr_haptics);
 	Cvar_RegisterVariable(&vr_thumbstick_deadzone);
 	Cvar_RegisterVariable(&vr_menu_pointer_scale);
+	Cvar_RegisterVariable(&vr_keyboard);
 	R_LaserSights_Init();
 }
 
@@ -807,8 +809,8 @@ void VRH_HandleInput(void)
 		VRH_Button(1, b[1], ovrButton_B, K_ESCAPE);
 		VRH_Button(0, b[0], ovrButton_Trigger, K_MOUSE1);
 		VRH_Button(1, b[1], ovrButton_Trigger, K_MOUSE1);
-		// Y opens the grid keyboard (for chat, console, menu text fields)
-		if ((b[0] & ovrButton_Y) && !(vrh_buttons_prev[0] & ovrButton_Y))
+		// Y opens the grid keyboard (disabled by default: vr_keyboard 1 enables it)
+		if (vr_keyboard.integer && (b[0] & ovrButton_Y) && !(vrh_buttons_prev[0] & ovrButton_Y))
 			vrh_textinput = true;
 	}
 	// menu button (left controller) toggles the menu in both modes
