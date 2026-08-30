@@ -209,6 +209,42 @@ void VR_InitRenderer( engine_t* engine, bool multiview ) {
 
 	int msaa = VR_GetConfig(VR_CONFIG_VIEWPORT_MSAA);
 	ovrRenderer_Create(engine->appState.Session, &engine->appState.Renderer, multiview, eyeW, eyeH, msaa > 0 ? msaa : 1);
+
+	// fixed foveated rendering: render the lens periphery at reduced density
+	if (VR_HasFoveationExt() && VR_GetConfig(VR_CONFIG_FOVEATION_LEVEL) > 0) {
+		PFN_xrCreateFoveationProfileFB pfnCreateFoveationProfile = NULL;
+		PFN_xrDestroyFoveationProfileFB pfnDestroyFoveationProfile = NULL;
+		PFN_xrUpdateSwapchainFB pfnUpdateSwapchain = NULL;
+		OXR(xrGetInstanceProcAddr(engine->appState.Instance, "xrCreateFoveationProfileFB", (PFN_xrVoidFunction*)(&pfnCreateFoveationProfile)));
+		OXR(xrGetInstanceProcAddr(engine->appState.Instance, "xrDestroyFoveationProfileFB", (PFN_xrVoidFunction*)(&pfnDestroyFoveationProfile)));
+		OXR(xrGetInstanceProcAddr(engine->appState.Instance, "xrUpdateSwapchainFB", (PFN_xrVoidFunction*)(&pfnUpdateSwapchain)));
+		if (pfnCreateFoveationProfile && pfnUpdateSwapchain) {
+			int eye;
+			XrFoveationLevelProfileCreateInfoFB levelInfo;
+			XrFoveationProfileCreateInfoFB profileInfo;
+			XrFoveationProfileFB profile = XR_NULL_HANDLE;
+			memset(&levelInfo, 0, sizeof(levelInfo));
+			levelInfo.type = XR_TYPE_FOVEATION_LEVEL_PROFILE_CREATE_INFO_FB;
+			levelInfo.level = (XrFoveationLevelFB)VR_GetConfig(VR_CONFIG_FOVEATION_LEVEL);
+			levelInfo.verticalOffset = 0;
+			levelInfo.dynamic = XR_FOVEATION_DYNAMIC_DISABLED_FB;
+			memset(&profileInfo, 0, sizeof(profileInfo));
+			profileInfo.type = XR_TYPE_FOVEATION_PROFILE_CREATE_INFO_FB;
+			profileInfo.next = &levelInfo;
+			OXR(pfnCreateFoveationProfile(engine->appState.Session, &profileInfo, &profile));
+			if (profile != XR_NULL_HANDLE) {
+				XrSwapchainStateFoveationFB foveationState;
+				memset(&foveationState, 0, sizeof(foveationState));
+				foveationState.type = XR_TYPE_SWAPCHAIN_STATE_FOVEATION_FB;
+				foveationState.profile = profile;
+				for (eye = 0; eye < ovrMaxNumEyes; eye++)
+					OXR(pfnUpdateSwapchain(engine->appState.Renderer.FrameBuffer[eye].ColorSwapChain.Handle, (const XrSwapchainStateBaseHeaderFB*)&foveationState));
+				if (pfnDestroyFoveationProfile)
+					OXR(pfnDestroyFoveationProfile(profile));
+				ALOGV("Foveated rendering enabled, level %i", VR_GetConfig(VR_CONFIG_FOVEATION_LEVEL));
+			}
+		}
+	}
 	initialized = true;
 	ALOGV("Renderer initialised: eye buffers %ix%i, msaa %i, screen rect %ix%i", eyeW, eyeH, msaa,
 			VR_GetConfig(VR_CONFIG_SCREEN_WIDTH), VR_GetConfig(VR_CONFIG_SCREEN_HEIGHT));

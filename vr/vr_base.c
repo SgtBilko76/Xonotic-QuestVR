@@ -18,6 +18,7 @@ static bool g_hasPerfSettingsExt = false;
 static bool g_hasAndroidThreadSettingsExt = false;
 static bool g_hasDisplayRefreshRateExt = false;
 static bool g_hasCylinderLayerExt = false;
+static bool g_hasFoveationExt = false;
 
 void OXR_CheckErrors(XrInstance instance, XrResult result, const char* function, bool failOnError) {
 	if (XR_FAILED(result)) {
@@ -43,6 +44,10 @@ static bool XR_ExtensionSupported(const char* name, const XrExtensionProperties*
 
 bool VR_HasCylinderLayerExt(void) {
 	return g_hasCylinderLayerExt;
+}
+
+bool VR_HasFoveationExt(void) {
+	return g_hasFoveationExt;
 }
 
 void VR_Init( void* system, const char* name, int version ) {
@@ -112,6 +117,16 @@ void VR_Init( void* system, const char* name, int version ) {
 			XR_ExtensionSupported(XR_KHR_ANDROID_THREAD_SETTINGS_EXTENSION_NAME, runtimeExtProps, runtimeExtCount);
 	if (g_hasAndroidThreadSettingsExt) {
 		extensions[extensionsCount++] = XR_KHR_ANDROID_THREAD_SETTINGS_EXTENSION_NAME;
+	}
+
+	g_hasFoveationExt =
+			XR_ExtensionSupported(XR_FB_FOVEATION_EXTENSION_NAME, runtimeExtProps, runtimeExtCount) &&
+			XR_ExtensionSupported(XR_FB_FOVEATION_CONFIGURATION_EXTENSION_NAME, runtimeExtProps, runtimeExtCount) &&
+			XR_ExtensionSupported(XR_FB_SWAPCHAIN_UPDATE_STATE_EXTENSION_NAME, runtimeExtProps, runtimeExtCount);
+	if (g_hasFoveationExt) {
+		extensions[extensionsCount++] = XR_FB_FOVEATION_EXTENSION_NAME;
+		extensions[extensionsCount++] = XR_FB_FOVEATION_CONFIGURATION_EXTENSION_NAME;
+		extensions[extensionsCount++] = XR_FB_SWAPCHAIN_UPDATE_STATE_EXTENSION_NAME;
 	}
 
 	g_hasDisplayRefreshRateExt =
