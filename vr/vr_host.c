@@ -568,6 +568,7 @@ static void VRH_Button(int hand, uint32_t buttons, uint32_t mask, int key)
 
 /* ---- grid text input (ported from QuakeQuest) ---- */
 static bool vrh_textinput = false;
+static char vrh_kb_overlay[512];
 static int vrh_kb_shift = 0, vrh_kb_lgrid = 0, vrh_kb_rgrid = 0;
 static const char kb_left_lower[3][10] = {"bcfihgdae", "klorqpmjn", "tuwzyxvs "};
 static const char kb_left_shift[3][10] = {"BCFIHGDAE", "KLORQPMJN", "TUWZYXVS "};
@@ -624,7 +625,7 @@ static void VRH_HandleTextInput(uint32_t b0, uint32_t b1)
 	if ((b0 & ovrButton_Y) && !(vrh_buttons_prev[0] & ovrButton_Y))
 	{
 		vrh_textinput = false;
-		SCR_CenterPrint("Text input: off");
+		vrh_kb_overlay[0] = 0;
 		return;
 	}
 	if ((b0 & ovrButton_X) && !(vrh_buttons_prev[0] & ovrButton_X))
@@ -639,17 +640,53 @@ static void VRH_HandleTextInput(uint32_t b0, uint32_t b1)
 
 	VRH_KeyboardButton(1, b1, ovrButton_A, K_ENTER, 0);
 	VRH_KeyboardButton(1, b1, ovrButton_B, K_BACKSPACE, 0);
+	VRH_KeyboardButton(1, b1, ovrButton_Joystick, ' ', ' ');       /* right stick click = space */
+	VRH_KeyboardButton(0, b0, ovrButton_Joystick, K_BACKSPACE, 0); /* left stick click = backspace */
 	VRH_KeyboardButton(0, b0, ovrButton_Trigger, lc, lc);
 	VRH_KeyboardButton(1, b1, ovrButton_Trigger, rc, rc);
 	VRH_KeyboardButton(0, b0, ovrButton_Enter, K_ESCAPE, 0);
 
-	dpsnprintf(buffer, sizeof(buffer),
-		" %s       %s\n %s       %s\n %s       %s\n\nText input:   %c    %c\n(Y exit, X shift, grips cycle, triggers type, A enter, B delete)",
+	dpsnprintf(vrh_kb_overlay, sizeof(vrh_kb_overlay),
+		"  %s        %s\n  %s        %s\n  %s        %s\n\n  type:  [%c]  [%c]\nY exit | X shift | grips cycle sets | triggers type\nA enter | B or L-stick delete | R-stick space",
 		kb_left_map[vrh_kb_shift][0][vrh_kb_lgrid], kb_right_map[vrh_kb_shift][0][vrh_kb_rgrid],
 		kb_left_map[vrh_kb_shift][1][vrh_kb_lgrid], kb_right_map[vrh_kb_shift][1][vrh_kb_rgrid],
 		kb_left_map[vrh_kb_shift][2][vrh_kb_lgrid], kb_right_map[vrh_kb_shift][2][vrh_kb_rgrid],
 		lc, rc);
-	SCR_CenterPrint(buffer);
+	(void)buffer;
+}
+
+/* draw the keyboard overlay in the 2D stage; works in menus and in-game alike */
+void VRH_DrawTextInputOverlay(void)
+{
+	float x, y, size = 16;
+	int lines = 1;
+	const char *p, *q;
+	char line[128];
+	if (!vrh_session || !vrh_textinput || !vrh_kb_overlay[0])
+		return;
+	for (p = vrh_kb_overlay; *p; p++)
+		if (*p == '\n')
+			lines++;
+	DrawQ_Start();
+	x = vid_conwidth.integer * 0.5f - 190;
+	y = vid_conheight.integer * 0.62f;
+	DrawQ_Fill(x - 12, y - 12, 420, lines * size + 24, 0, 0, 0, 0.75f, 0);
+	p = vrh_kb_overlay;
+	while (*p)
+	{
+		size_t n;
+		q = strchr(p, '\n');
+		n = q ? (size_t)(q - p) : strlen(p);
+		if (n >= sizeof(line)) n = sizeof(line) - 1;
+		memcpy(line, p, n);
+		line[n] = 0;
+		DrawQ_String(x, y, line, 0, size, size, 1, 1, 1, 1, 0, NULL, true, FONT_DEFAULT);
+		y += size;
+		if (!q)
+			break;
+		p = q + 1;
+	}
+	DrawQ_Finish();
 }
 
 /* current thumbstick input; consumed by IN_Move via VRH_GetMove */
@@ -772,10 +809,7 @@ void VRH_HandleInput(void)
 		VRH_Button(1, b[1], ovrButton_Trigger, K_MOUSE1);
 		// Y opens the grid keyboard (for chat, console, menu text fields)
 		if ((b[0] & ovrButton_Y) && !(vrh_buttons_prev[0] & ovrButton_Y))
-		{
 			vrh_textinput = true;
-			SCR_CenterPrint("Text input: on");
-		}
 	}
 	// menu button (left controller) toggles the menu in both modes
 	VRH_Button(0, b[0], ovrButton_Enter, K_ESCAPE);

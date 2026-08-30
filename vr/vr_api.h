@@ -55,6 +55,7 @@ void  VRH_HandleInput(void);
 void  VRH_AddYaw(float degrees);
 bool  VRH_GetMove(float *forward, float *side);   /* -1..1 thumbstick movement in the aim-yaw frame */
 void  VRH_SetCursor(int x, int y);
+void  VRH_DrawTextInputOverlay(void);           /* grid keyboard overlay, drawn in the 2D stage */
 bool  VRH_GetCursor(int *x, int *y);              /* laser-pointer cursor in screen pixels (top-left origin) */
 
 /* ---- laser sight (vr/r_lasersight.c) ---- */

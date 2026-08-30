@@ -2317,6 +2317,7 @@ void CL_UpdateScreen(void)
 				r_refdef.view.isoverlay = false;
 				r_refdef.view.quality = cl_updatescreen_quality;
 				SCR_DrawScreen();
+				VRH_DrawTextInputOverlay();
 				VRH_EndEye(eye);
 			}
 			r_stereo_side = 0;
