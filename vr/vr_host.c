@@ -120,10 +120,13 @@ static void VRH_InitPlatformFlags(void)
 
 /* ---------------------------------------------------------------- lifecycle */
 
-void VRH_Init(void)
+static bool vrh_cvars_registered = false;
+
+void VRH_RegisterCvars(void)
 {
-	if (vrh_initialized)
+	if (vrh_cvars_registered)
 		return;
+	vrh_cvars_registered = true;
 	Cvar_RegisterVariable(&vr_worldscale);
 	Cvar_RegisterVariable(&vr_weaponscale);
 	Cvar_RegisterVariable(&vr_weaponpitchadjust);
@@ -145,6 +148,13 @@ void VRH_Init(void)
 	Cvar_RegisterVariable(&vr_haptics);
 	Cvar_RegisterVariable(&vr_thumbstick_deadzone);
 	Cvar_RegisterVariable(&vr_menu_pointer_scale);
+}
+
+void VRH_Init(void)
+{
+	if (vrh_initialized)
+		return;
+	VRH_RegisterCvars();
 	vrh_initialized = true;
 
 	if (Sys_CheckParm("-novr"))
@@ -228,7 +238,7 @@ static void VRH_UpdatePoses(void)
 	vrh_hmdpos_xr[0] = head.position.x;
 	vrh_hmdpos_xr[1] = head.position.y;
 	vrh_hmdpos_xr[2] = head.position.z;
-	if (vrh_needcalibrate)
+	if (vrh_needcalibrate && VR_HeadTracked() && head.position.y > 0.3f)
 	{
 		VectorCopy(vrh_hmdpos_xr, vrh_recenter_xr);
 		vrh_playerheight = head.position.y;

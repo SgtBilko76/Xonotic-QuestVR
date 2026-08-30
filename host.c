@@ -486,6 +486,9 @@ void Host_Init (void)
 	TaskQueue_Init();
 
 	CL_Init();
+#ifdef VR_QUEST
+	VRH_RegisterCvars();
+#endif
 
 	// save off current state of aliases, commands and cvars for later restore if FS_GameDir_f is called
 	// NOTE: menu commands are freed by Cmd_RestoreInitState

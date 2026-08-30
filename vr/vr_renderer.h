@@ -44,5 +44,6 @@ bool VR_DidRecenter(void);
 XrPosef VR_GetView(int eye);          /* eye pose in CurrentSpace */
 XrFovf VR_GetFov(int eye);            /* per-eye asymmetric fov (radians) */
 XrPosef VR_GetHeadPose(void);         /* head pose in CurrentSpace for this frame */
+bool VR_HeadTracked(void);            /* position+orientation valid this frame */
 int VR_GetRefreshRate(void);
 void VR_SetRefreshRate(int refresh);
