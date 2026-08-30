@@ -989,10 +989,10 @@ int R_Mesh_CreateFramebufferObject(rtexture_t *depthtexture, rtexture_t *colorte
 		CHECKGLERROR
 		qglGenFramebuffers(1, (GLuint*)&temp);CHECKGLERROR
 
-#ifndef USE_GLES2
-		R_Mesh_SetRenderTargets(temp);  // This breaks GLES2.
+		// bind the new FBO before attaching to it (the attachments below go to the bound FBO;
+		// skipping this on GLES corrupted whatever FBO was current - e.g. the VR eye buffer)
+		R_Mesh_SetRenderTargets(temp);
 		// GL_ARB_framebuffer_object (GL3-class hardware) - depth stencil attachment
-#endif
 
 #ifdef USE_GLES2
 		// FIXME: separate stencil attachment on GLES
