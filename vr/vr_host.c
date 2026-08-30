@@ -337,22 +337,12 @@ bool VRH_FrameSetup(void)
 	VRH_UpdatePoses();
 
 	// flat screen for anything that is not the 3D game view
-	vrh_screenmode = !VRH_InGame() || scr_loading || key_consoleactive;
+	vrh_screenmode = cls.state != ca_connected || cls.signon != SIGNONS || key_dest == key_menu || scr_loading || (key_consoleactive & KEY_CONSOLEACTIVE_USER) != 0;
 	VR_SetConfig(VR_CONFIG_MODE, vrh_screenmode ? VR_MODE_MONO_SCREEN : VR_MODE_STEREO_6DOF);
 	VR_SetConfigFloat(VR_CONFIG_CANVAS_DISTANCE, vr_screen_distance.value);
 
 	VRH_HandleInput();
 
-	{
-		static double lastposelog;
-		if (host.realtime > lastposelog + 1.0)
-		{
-			lastposelog = host.realtime;
-			VRH_Log("pose: hmd yaw %.1f pitch %.1f | viewangles yaw %.1f pitch %.1f | gun yaw %.1f valid %i | yawofs %.1f | mode %s",
-				vrh_hmdangles[YAW], vrh_hmdangles[PITCH], cl.viewangles[YAW], cl.viewangles[PITCH],
-				vr_gunangles[YAW], (int)vrh_gunvalid, vrh_yawoffset, vrh_screenmode ? "screen" : "3d");
-		}
-	}
 	return true;
 }
 
@@ -576,6 +566,92 @@ static void VRH_Button(int hand, uint32_t buttons, uint32_t mask, int key)
 		Key_Event(key, 0, now);
 }
 
+/* ---- grid text input (ported from QuakeQuest) ---- */
+static bool vrh_textinput = false;
+static int vrh_kb_shift = 0, vrh_kb_lgrid = 0, vrh_kb_rgrid = 0;
+static const char kb_left_lower[3][10] = {"bcfihgdae", "klorqpmjn", "tuwzyxvs "};
+static const char kb_left_shift[3][10] = {"BCFIHGDAE", "KLORQPMJN", "TUWZYXVS "};
+static const char kb_right_lower[3][10] = {"236987415", "+-)]&[(?0", "         "};
+static const char kb_right_shift[3][10] = {"\"*:|._~/#", "%^}>,<{\\@", "         "};
+static const char *kb_left_map[2][3][3] = {
+	{{"a  b  c", "j  k  l", "s  t  u"}, {"d  e  f", "m  n  o", "v     w"}, {"g  h  i", "p  q  r", "x  y  z"}},
+	{{"A  B  C", "J  K  L", "S  T  U"}, {"D  E  F", "M  N  O", "V     W"}, {"G  H  I", "P  Q  R", "X  Y  Z"}},
+};
+static const char *kb_right_map[2][3][3] = {
+	{{"1  2  3", "?  +  -", "       "}, {"4  5  6", "(  0  )", "       "}, {"7  8  9", "[  &  ]", "       "}},
+	{{"/  \"  *", "\\  %  ^", "       "}, {"~  #  :", "{  @  }", "       "}, {"_  .  |", "<  ,  >", "       "}},
+};
+
+static int VRH_KeyboardCell(float x, float y)
+{
+	int c = 8;
+	if (x < -0.3f || x > 0.3f || y < -0.3f || y > 0.3f)
+	{
+		if (x == 0.0f)
+			c = (y > 0.0f) ? 0 : 4;
+		else
+		{
+			float angle = atanf(y / x) / ((float)M_PI / 180.0f);
+			if (x > 0.0f)
+				c = (int)(((90.0f - angle) + 22.5f) / 45.0f);
+			else
+			{
+				c = (int)(((90.0f - angle) + 22.5f) / 45.0f) + 4;
+				if (c == 8)
+					c = 0;
+			}
+		}
+	}
+	return c;
+}
+
+static void VRH_KeyboardButton(int hand, uint32_t buttons, uint32_t mask, int key, int ascii)
+{
+	bool now = (buttons & mask) != 0;
+	bool was = (vrh_buttons_prev[hand] & mask) != 0;
+	if (now != was)
+		Key_Event(key, ascii, now);
+}
+
+static void VRH_HandleTextInput(uint32_t b0, uint32_t b1)
+{
+	XrVector2f sl = IN_VRGetJoystickState(0), sr = IN_VRGetJoystickState(1);
+	int li = VRH_KeyboardCell(sl.x, sl.y);
+	int ri = VRH_KeyboardCell(sr.x, sr.y);
+	char lc, rc;
+	char buffer[512];
+
+	if ((b0 & ovrButton_Y) && !(vrh_buttons_prev[0] & ovrButton_Y))
+	{
+		vrh_textinput = false;
+		SCR_CenterPrint("Text input: off");
+		return;
+	}
+	if ((b0 & ovrButton_X) && !(vrh_buttons_prev[0] & ovrButton_X))
+		vrh_kb_shift = 1 - vrh_kb_shift;
+	if ((b0 & ovrButton_GripTrigger) && !(vrh_buttons_prev[0] & ovrButton_GripTrigger))
+		vrh_kb_lgrid = (vrh_kb_lgrid + 1) % 3;
+	if ((b1 & ovrButton_GripTrigger) && !(vrh_buttons_prev[1] & ovrButton_GripTrigger))
+		vrh_kb_rgrid = (vrh_kb_rgrid + 1) % 3;
+
+	lc = vrh_kb_shift ? kb_left_shift[vrh_kb_lgrid][li] : kb_left_lower[vrh_kb_lgrid][li];
+	rc = vrh_kb_shift ? kb_right_shift[vrh_kb_rgrid][ri] : kb_right_lower[vrh_kb_rgrid][ri];
+
+	VRH_KeyboardButton(1, b1, ovrButton_A, K_ENTER, 0);
+	VRH_KeyboardButton(1, b1, ovrButton_B, K_BACKSPACE, 0);
+	VRH_KeyboardButton(0, b0, ovrButton_Trigger, lc, lc);
+	VRH_KeyboardButton(1, b1, ovrButton_Trigger, rc, rc);
+	VRH_KeyboardButton(0, b0, ovrButton_Enter, K_ESCAPE, 0);
+
+	dpsnprintf(buffer, sizeof(buffer),
+		" %s       %s\n %s       %s\n %s       %s\n\nText input:   %c    %c\n(Y exit, X shift, grips cycle, triggers type, A enter, B delete)",
+		kb_left_map[vrh_kb_shift][0][vrh_kb_lgrid], kb_right_map[vrh_kb_shift][0][vrh_kb_rgrid],
+		kb_left_map[vrh_kb_shift][1][vrh_kb_lgrid], kb_right_map[vrh_kb_shift][1][vrh_kb_rgrid],
+		kb_left_map[vrh_kb_shift][2][vrh_kb_lgrid], kb_right_map[vrh_kb_shift][2][vrh_kb_rgrid],
+		lc, rc);
+	SCR_CenterPrint(buffer);
+}
+
 /* current thumbstick input; consumed by IN_Move via VRH_GetMove */
 static float vrh_move[2];
 
@@ -599,6 +675,16 @@ void VRH_HandleInput(void)
 	XrVector2f turnStick = cl_righthanded.integer ? stickR : stickL;
 	float dz = bound(0.0f, vr_thumbstick_deadzone.value, 0.9f);
 	bool ingame = VRH_InGame() && !vrh_screenmode;
+
+	// ----- grid text input consumes everything while active
+	if (vrh_textinput)
+	{
+		vrh_move[0] = vrh_move[1] = 0;
+		VRH_HandleTextInput(b[0], b[1]);
+		vrh_buttons_prev[0] = b[0];
+		vrh_buttons_prev[1] = b[1];
+		return;
+	}
 
 	// ----- movement: off-hand stick, relative to the head (or off-hand controller) and re-expressed
 	// in the frame of the aim yaw, because the server moves the player relative to cmd.viewangles
@@ -655,6 +741,8 @@ void VRH_HandleInput(void)
 	if (ingame)
 	{
 		VRH_Button(hand, b[hand], ovrButton_Trigger, K_MOUSE1);          /* +fire */
+		if ((b[hand] & ovrButton_Trigger) && !(vrh_buttons_prev[hand] & ovrButton_Trigger))
+			VRH_Vibrate(hand, 80, 0.4f);                                 /* fire feedback */
 		VRH_Button(hand, b[hand], ovrButton_GripTrigger, K_MOUSE2);      /* +fire2 */
 		VRH_Button(offhand, b[offhand], ovrButton_Trigger, K_SPACE);     /* +jump */
 		VRH_Button(offhand, b[offhand], ovrButton_GripTrigger, K_MOUSE4);/* +hook */
@@ -682,7 +770,12 @@ void VRH_HandleInput(void)
 		VRH_Button(1, b[1], ovrButton_B, K_ESCAPE);
 		VRH_Button(0, b[0], ovrButton_Trigger, K_MOUSE1);
 		VRH_Button(1, b[1], ovrButton_Trigger, K_MOUSE1);
-		VRH_Button(0, b[0], ovrButton_Y, K_BACKSPACE);
+		// Y opens the grid keyboard (for chat, console, menu text fields)
+		if ((b[0] & ovrButton_Y) && !(vrh_buttons_prev[0] & ovrButton_Y))
+		{
+			vrh_textinput = true;
+			SCR_CenterPrint("Text input: on");
+		}
 	}
 	// menu button (left controller) toggles the menu in both modes
 	VRH_Button(0, b[0], ovrButton_Enter, K_ESCAPE);

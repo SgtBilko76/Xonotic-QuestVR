@@ -259,65 +259,6 @@ void IN_VRInit( engine_t *engine ) {
 	attachInfo.actionSets = &runningActionSet;
 	OXR(xrAttachSessionActionSets(engine->appState.Session, &attachInfo));
 
-	// Enumerate actions
-	XrPath actionPathsBuffer[32];
-	char stringBuffer[256];
-	XrAction actionsToEnumerate[] = {
-			indexLeftAction,
-			indexRightAction,
-			menuAction,
-			buttonAAction,
-			buttonBAction,
-			buttonXAction,
-			buttonYAction,
-			gripLeftAction,
-			gripRightAction,
-			moveOnLeftJoystickAction,
-			moveOnRightJoystickAction,
-			thumbstickLeftClickAction,
-			thumbstickRightClickAction,
-			vibrateLeftFeedback,
-			vibrateRightFeedback,
-			handPoseLeftAction,
-			handPoseRightAction
-	};
-	for (int index = 0; index < sizeof(actionsToEnumerate) / sizeof(XrAction); index++) {
-		XrBoundSourcesForActionEnumerateInfo enumerateInfo;
-		memset(&enumerateInfo, 0, sizeof(enumerateInfo));
-		enumerateInfo.type = XR_TYPE_BOUND_SOURCES_FOR_ACTION_ENUMERATE_INFO;
-		enumerateInfo.next = NULL;
-		enumerateInfo.action = actionsToEnumerate[index];
-
-		// Get Count
-		uint32_t countOutput = 0;
-		OXR(xrEnumerateBoundSourcesForAction(engine->appState.Session, &enumerateInfo, 0 /* request size */, &countOutput, NULL));
-		ALOGV("xrEnumerateBoundSourcesForAction action=%lld count=%u", (long long)enumerateInfo.action, countOutput);
-
-		if (countOutput < 32) {
-			OXR(xrEnumerateBoundSourcesForAction(
-					engine->appState.Session, &enumerateInfo, 32, &countOutput, actionPathsBuffer));
-			for (uint32_t a = 0; a < countOutput; ++a) {
-				XrInputSourceLocalizedNameGetInfo nameGetInfo;
-				memset(&nameGetInfo, 0, sizeof(nameGetInfo));
-				nameGetInfo.type = XR_TYPE_INPUT_SOURCE_LOCALIZED_NAME_GET_INFO;
-				nameGetInfo.next = NULL;
-				nameGetInfo.sourcePath = actionPathsBuffer[a];
-				nameGetInfo.whichComponents = XR_INPUT_SOURCE_LOCALIZED_NAME_USER_PATH_BIT |
-				                              XR_INPUT_SOURCE_LOCALIZED_NAME_INTERACTION_PROFILE_BIT |
-				                              XR_INPUT_SOURCE_LOCALIZED_NAME_COMPONENT_BIT;
-
-				uint32_t stringCount = 0u;
-				OXR(xrGetInputSourceLocalizedName(engine->appState.Session, &nameGetInfo, 0, &stringCount, NULL));
-				if (stringCount < 256) {
-					OXR(xrGetInputSourceLocalizedName(engine->appState.Session, &nameGetInfo, 256, &stringCount, stringBuffer));
-					char pathStr[256];
-					uint32_t strLen = 0;
-					OXR(xrPathToString(engine->appState.Instance, actionPathsBuffer[a], (uint32_t)sizeof(pathStr), &strLen, pathStr));
-					ALOGV("  -> path = %lld `%s` -> `%s`", (long long)actionPathsBuffer[a], pathStr, stringBuffer);
-				}
-			}
-		}
-	}
 	inputInitialized = 1;
 }
 
