@@ -177,6 +177,7 @@ void VRH_RegisterCvars(void)
 	Cvar_RegisterVariable(&vr_haptics);
 	Cvar_RegisterVariable(&vr_thumbstick_deadzone);
 	Cvar_RegisterVariable(&vr_menu_pointer_scale);
+	R_LaserSights_Init();
 }
 
 void VRH_Init(void)
@@ -341,6 +342,17 @@ bool VRH_FrameSetup(void)
 	VR_SetConfigFloat(VR_CONFIG_CANVAS_DISTANCE, vr_screen_distance.value);
 
 	VRH_HandleInput();
+
+	{
+		static double lastposelog;
+		if (host.realtime > lastposelog + 1.0)
+		{
+			lastposelog = host.realtime;
+			VRH_Log("pose: hmd yaw %.1f pitch %.1f | viewangles yaw %.1f pitch %.1f | gun yaw %.1f valid %i | yawofs %.1f | mode %s",
+				vrh_hmdangles[YAW], vrh_hmdangles[PITCH], cl.viewangles[YAW], cl.viewangles[PITCH],
+				vr_gunangles[YAW], (int)vrh_gunvalid, vrh_yawoffset, vrh_screenmode ? "screen" : "3d");
+		}
+	}
 	return true;
 }
 
@@ -419,6 +431,13 @@ void VRH_GetProjection(int eye, float znear, float zfar, float m16[16])
 	m16[5] = 2.0f / (u - d);
 	m16[8] = (r + l) / (r - l);
 	m16[9] = (u + d) / (u - d);
+	{
+		static int logged[2];
+		if (logged[bound(0, eye, 1)]++ < 2)
+			VRH_Log("projection eye %i: fov L %.1f R %.1f U %.1f D %.1f deg -> m0 %.3f m5 %.3f m8 %.3f m9 %.3f (near %.2f far %.0f)",
+				eye, fov.angleLeft * 180 / M_PI, fov.angleRight * 180 / M_PI, fov.angleUp * 180 / M_PI, fov.angleDown * 180 / M_PI,
+				m16[0], m16[5], m16[8], m16[9], znear, zfar);
+	}
 }
 
 void VRH_GetUnionFovTangents(float *tanx, float *tany)
