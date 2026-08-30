@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 #include "quakedef.h"
+#include "vr/vr_api.h"
 #include "image.h"
 #include "wad.h"
 
@@ -789,6 +790,18 @@ void GL_Draw_Init (void)
 void DrawQ_Start(void)
 {
 	r_refdef.draw2dstage = 1;
+#ifdef VR_QUEST
+	{
+		int x, y, w, h;
+		// VR: the HUD canvas is shrunk to the centre of each eye and shifted per eye so it sits at a
+		// comfortable depth instead of at infinity
+		if (VRH_GetHudRect(&x, &y, &w, &h))
+		{
+			R_ResetViewRendering2D_Common(0, NULL, NULL, x, y, w, h, vid_conwidth.integer, vid_conheight.integer);
+			return;
+		}
+	}
+#endif
 	R_ResetViewRendering2D_Common(0, NULL, NULL, 0, 0, vid.mode.width, vid.mode.height, vid_conwidth.integer, vid_conheight.integer);
 }
 

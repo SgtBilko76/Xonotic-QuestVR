@@ -339,6 +339,21 @@ void VRH_GetEyeResolution(int *width, int *height)
 	}
 }
 
+bool VRH_GetHudRect(int *x, int *y, int *w, int *h)
+{
+	float scale, shift;
+	if (!vrh_session || vrh_screenmode)
+		return false;
+	scale = bound(0.2f, vr_hudscale.value, 1.0f);
+	shift = bound(-0.1f, vr_hudstereo.value, 0.1f) * vid.mode.width;
+	*w = (int)(vid.mode.width * scale);
+	*h = (int)(vid.mode.height * scale);
+	// converge: left eye's canvas shifted right, right eye's shifted left
+	*x = (vid.mode.width - *w) / 2 + (int)(r_stereo_side == 0 ? shift : -shift);
+	*y = (vid.mode.height - *h) / 2;
+	return true;
+}
+
 void VRH_BeginEye(int eye)
 {
 	engine_t *engine = VR_GetEngine();

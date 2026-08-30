@@ -31,6 +31,7 @@ void  VRH_BeginEye(int eye);        /* bind the eye swapchain as the engine's "s
 void  VRH_EndEye(int eye);
 void  VRH_SubmitFrame(void);        /* xrEndFrame */
 void  VRH_GetEyeResolution(int *width, int *height);
+bool  VRH_GetHudRect(int *x, int *y, int *w, int *h);   /* 2D canvas rect for the current eye (false: full screen) */
 bool  VRH_ScreenMode(void);         /* true: menu/console/loading -> mono render on a flat layer */
 
 /* ---- view / projection ---- */
