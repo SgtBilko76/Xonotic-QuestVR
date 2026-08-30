@@ -936,6 +936,11 @@ extern void (GLAPIENTRY *qglViewport)(GLint x, GLint y, GLsizei width, GLsizei h
 #define qglStencilMask glStencilMask
 #define qglStencilOp glStencilOp
 #define qglTexImage2D glTexImage2D
+#ifdef VR_QUEST
+// ES3 core functions not declared by the ES2 headers SDL provides
+GL_APICALL void GL_APIENTRY glTexImage3D(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void *pixels);
+GL_APICALL void GL_APIENTRY glTexSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void *pixels);
+#endif
 #define qglTexImage3D glTexImage3D
 #define qglTexParameterf glTexParameterf
 #define qglTexParameterfv glTexParameterfv
