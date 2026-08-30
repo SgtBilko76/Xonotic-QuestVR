@@ -14,6 +14,7 @@
 
 static XrView projections[ovrMaxNumEyes];
 static XrPosef headPose;
+static bool headTracked = false;
 static bool initialized = false;
 static bool recenterCalled = false;
 static bool stageBoundsDirty = true;
@@ -28,9 +29,11 @@ static void VR_UpdateStageBounds(ovrApp* pappState) {
 	XrResult result;
 	memset(&stageBounds, 0, sizeof(stageBounds));
 	OXR(result = xrGetReferenceSpaceBoundsRect(pappState->Session, XR_REFERENCE_SPACE_TYPE_STAGE, &stageBounds));
-	if (result != XR_SUCCESS) {
+	if (result != XR_SUCCESS || pappState->StageSpace == XR_NULL_HANDLE) {
 		pappState->CurrentSpace = pappState->FakeStageSpace;
 	}
+	if (pappState->CurrentSpace == XR_NULL_HANDLE)
+		pappState->CurrentSpace = pappState->FakeStageSpace;
 }
 
 void VR_GetResolution(engine_t* engine, int *pWidth, int *pHeight) {
@@ -62,6 +65,15 @@ void VR_GetResolution(engine_t* engine, int *pWidth, int *pHeight) {
 	if (supersampling > 0) {
 		*pWidth = (int)(*pWidth * supersampling);
 		*pHeight = (int)(*pHeight * supersampling);
+	}
+	// cap the eye buffer: the runtime may recommend very large sizes on Quest 3, which the
+	// DarkPlaces GLES path cannot fill at 72-90 Hz
+	{
+		const int maxWidth = 2048;
+		if (*pWidth > maxWidth) {
+			*pHeight = (int)((long long)*pHeight * maxWidth / *pWidth);
+			*pWidth = maxWidth;
+		}
 	}
 	// keep dimensions even
 	*pWidth &= ~1;
@@ -119,13 +131,19 @@ void VR_Recenter(engine_t* engine) {
 	engine->appState.CurrentSpace = engine->appState.FakeStageSpace;
 
 	if (stageSupported) {
+		XrResult r;
 		spaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
 		spaceCreateInfo.poseInReferenceSpace.position.y = 0.0;
-		OXR(xrCreateReferenceSpace(engine->appState.Session, &spaceCreateInfo, &engine->appState.StageSpace));
-		if (VR_GetPlatformFlag(VR_PLATFORM_TRACKING_FLOOR)) {
+		OXR(r = xrCreateReferenceSpace(engine->appState.Session, &spaceCreateInfo, &engine->appState.StageSpace));
+		if (XR_FAILED(r) || engine->appState.StageSpace == XR_NULL_HANDLE) {
+			// no boundary / stage in this location: keep the floor-offset LOCAL space
+			ALOGE("STAGE reference space unavailable, using LOCAL space with floor offset");
+			engine->appState.StageSpace = XR_NULL_HANDLE;
+		} else if (VR_GetPlatformFlag(VR_PLATFORM_TRACKING_FLOOR)) {
 			engine->appState.CurrentSpace = engine->appState.StageSpace;
 		}
 	}
+	ALOGV("VR_Recenter: CurrentSpace=%p (stage=%p fake=%p)", (void*)engine->appState.CurrentSpace, (void*)engine->appState.StageSpace, (void*)engine->appState.FakeStageSpace);
 
 	// Update menu orientation
 	VR_SetConfigFloat(VR_CONFIG_MENU_YAW, 0.0f);
@@ -230,6 +248,7 @@ bool VR_InitFrame( engine_t* engine ) {
 	loc.type = XR_TYPE_SPACE_LOCATION;
 	OXR(xrLocateSpace(engine->appState.HeadSpace, engine->appState.CurrentSpace, engine->predictedDisplayTime, &loc));
 	headPose = loc.pose;
+	headTracked = (loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) && (loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT);
 
 	// Update controllers
 	IN_VRInputFrame(engine);
@@ -414,6 +433,10 @@ XrFovf VR_GetFov(int eye) {
 
 XrPosef VR_GetHeadPose(void) {
 	return headPose;
+}
+
+bool VR_HeadTracked(void) {
+	return headTracked;
 }
 
 int VR_GetRefreshRate(void) {

@@ -20,6 +20,7 @@ extern "C" {
 #endif
 
 /* ---- lifecycle (engine -> VR) ---- */
+void  VRH_RegisterCvars(void);      /* early in Host_Init, before configs are executed */
 void  VRH_Init(void);               /* after the GL context exists (Host_Init / VID_Start) */
 void  VRH_Shutdown(void);
 bool  VRH_Available(void);          /* OpenXR session created and usable */
