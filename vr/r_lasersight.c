@@ -8,7 +8,7 @@
 #include "cl_collision.h"
 #include "vr/vr_api.h"
 
-cvar_t r_lasersight = {CF_CLIENT | CF_ARCHIVE, "r_lasersight", "1", "VR laser sight: 0 off, 1 beam"};
+cvar_t r_lasersight = {CF_CLIENT | CF_ARCHIVE, "r_lasersight", "2", "VR laser sight: 0 off, 1 beam, 2 aim dot, 3 both"};
 cvar_t r_lasersight_thickness = {CF_CLIENT | CF_ARCHIVE, "r_lasersight_thickness", "0.4", "thickness of the laser sight beam"};
 cvar_t r_lasersight_color_red = {CF_CLIENT | CF_ARCHIVE, "r_lasersight_color_red", "0.8", "laser sight red"};
 cvar_t r_lasersight_color_green = {CF_CLIENT | CF_ARCHIVE, "r_lasersight_color_green", "0.1", "laser sight green"};
@@ -88,8 +88,28 @@ void R_DrawLaserSights(void)
 	VectorCopy(trace.endpos, end);
 	VectorCopy(muzzle, start);
 
-	R_DrawLaserBeamMesh(start, end, bound(0.05f, r_lasersight_thickness.value, 4.0f),
-		r_lasersight_color_red.value, r_lasersight_color_green.value, r_lasersight_color_blue.value, 0.5f);
+	if (r_lasersight.integer & 1)
+		R_DrawLaserBeamMesh(start, end, bound(0.05f, r_lasersight_thickness.value, 4.0f),
+			r_lasersight_color_red.value, r_lasersight_color_green.value, r_lasersight_color_blue.value, 0.5f);
+
+	if (r_lasersight.integer & 2)
+	{
+		// aim dot: a small cube at the hit point, sized for a constant angular size
+		vec3_t dotpos, vieworg, d;
+		float dist, size;
+		VectorMA(end, -1.0f, forward, dotpos); // pull slightly off the surface
+		Matrix4x4_OriginFromMatrix(&r_refdef.view.matrix, vieworg);
+		VectorSubtract(dotpos, vieworg, d);
+		dist = VectorLength(d);
+		size = max(0.4f, dist * 0.006f);
+		{
+			vec3_t a, b;
+			VectorMA(dotpos, -size * 0.5f, forward, a);
+			VectorMA(dotpos,  size * 0.5f, forward, b);
+			R_DrawLaserBeamMesh(a, b, size,
+				r_lasersight_color_red.value, r_lasersight_color_green.value, r_lasersight_color_blue.value, 0.9f);
+		}
+	}
 }
 
 #endif /* VR_QUEST */
