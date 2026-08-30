@@ -562,8 +562,7 @@ void VRH_HandleInput(void)
 		VRH_Button(1, b[1], ovrButton_B, K_CTRL);                        /* +crouch */
 		VRH_Button(0, b[0], ovrButton_X, K_JOY1);                        /* bindable (default: +use) */
 		VRH_Button(0, b[0], ovrButton_Y, K_TAB);                         /* scoreboard */
-		VRH_Button(hand, b[hand], ovrButton_Joystick, K_JOY2);           /* bindable (default: toggle laser) */
-		VRH_Button(offhand, b[offhand], ovrButton_Joystick, K_JOY3);     /* bindable */
+		VRH_Button(offhand, b[offhand], ovrButton_Joystick, K_JOY2);     /* bindable (default: toggle laser) */
 		// weapon switching on the aim-hand stick up/down
 		VRH_Button(hand, b[hand], ovrButton_Up, K_MWHEELUP);
 		VRH_Button(hand, b[hand], ovrButton_Down, K_MWHEELDOWN);
@@ -588,7 +587,9 @@ void VRH_HandleInput(void)
 	// menu button (left controller) toggles the menu in both modes
 	VRH_Button(0, b[0], ovrButton_Enter, K_ESCAPE);
 
-	// both grips + menu: recenter
+	// recenter: click the right thumbstick (or both grips + menu)
+	if ((b[1] & ovrButton_Joystick) && !(vrh_buttons_prev[1] & ovrButton_Joystick))
+		VRH_Recenter();
 	if ((b[0] & ovrButton_GripTrigger) && (b[1] & ovrButton_GripTrigger) && (b[0] & ovrButton_Enter) && !(vrh_buttons_prev[0] & ovrButton_Enter))
 		VRH_Recenter();
 
