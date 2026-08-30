@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // rights reserved.
 
 #include "quakedef.h"
+#include "vr/vr_api.h"
 #include "csprogs.h"
 #include "thread.h"
 
@@ -432,6 +433,11 @@ static void CL_AdjustAngles (void)
 {
 	float	speed;
 	float	up, down;
+
+#ifdef VR_QUEST
+	if (VRH_Available())
+		return; // the headset owns cl.viewangles (see IN_Move)
+#endif
 
 	if (in_speed.state & 1)
 		speed = cl.realframetime * cl_anglespeedkey.value;
@@ -1832,6 +1838,12 @@ void CL_SendMove(void)
 	cl.cmd.impulse = in_impulse;
 
 	// set viewangles
+#ifdef VR_QUEST
+	// the server (and prediction) aim along the controller, the headset only steers the view
+	if (VRH_Available() && VRH_InGame() && !VRH_ScreenMode() && VRH_HasGun())
+		VectorCopy(vr_gunangles, cl.cmd.viewangles);
+	else
+#endif
 	VectorCopy(cl.viewangles, cl.cmd.viewangles);
 
 	// bones_was_here: previously cl.cmd.frametime was floored to nearest millisec

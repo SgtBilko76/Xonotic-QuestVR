@@ -1,4 +1,5 @@
 #include "quakedef.h"
+#include "vr/vr_api.h"
 
 #include "prvm_cmds.h"
 #include "csprogs.h"
@@ -757,6 +758,24 @@ void CSQC_R_RecalcView (void)
 {
 	extern matrix4x4_t viewmodelmatrix_nobob;
 	extern matrix4x4_t viewmodelmatrix_withbob;
+#ifdef VR_QUEST
+	if (VRH_Available() && !VRH_ScreenMode())
+	{
+		vec3_t hmdpos, org, gunorg, gunangles;
+		// positional tracking: offset the camera from the player's eye position
+		VRH_GetHMDPosition(hmdpos);
+		VectorAdd(cl.csqc_vieworigin, hmdpos, org);
+		Matrix4x4_CreateFromQuakeEntity(&r_refdef.view.matrix, org[0], org[1], org[2], cl.csqc_viewangles[0], cl.csqc_viewangles[1], cl.csqc_viewangles[2], 1);
+		Matrix4x4_Copy(&viewmodelmatrix_nobob, &r_refdef.view.matrix);
+		Matrix4x4_ConcatScale(&viewmodelmatrix_nobob, cl_viewmodel_scale.value);
+		// the weapon (a CSQC RENDER_VIEWMODEL entity) follows the controller
+		if (VRH_GetGun(org, gunorg, gunangles))
+			Matrix4x4_CreateFromQuakeEntity(&viewmodelmatrix_withbob, gunorg[0], gunorg[1], gunorg[2], gunangles[0], gunangles[1], gunangles[2], VRH_GetWeaponScale());
+		else
+			Matrix4x4_Concat(&viewmodelmatrix_withbob, &r_refdef.view.matrix, &cl.csqc_viewmodelmatrixfromengine);
+		return;
+	}
+#endif
 	Matrix4x4_CreateFromQuakeEntity(&r_refdef.view.matrix, cl.csqc_vieworigin[0], cl.csqc_vieworigin[1], cl.csqc_vieworigin[2], cl.csqc_viewangles[0], cl.csqc_viewangles[1], cl.csqc_viewangles[2], 1);
 	if (v_yshearing.value > 0)
 		Matrix4x4_QuakeToDuke3D(&r_refdef.view.matrix, &r_refdef.view.matrix, v_yshearing.value);
