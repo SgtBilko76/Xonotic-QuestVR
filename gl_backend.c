@@ -626,10 +626,6 @@ void R_Viewport_InitOrtho(r_viewport_t *v, const matrix4x4_t *cameramatrix, int 
 	}
 	v->screentodepth[0] = -farclip / (farclip - nearclip);
 	v->screentodepth[1] = farclip * nearclip / (farclip - nearclip);
-#ifdef VR_QUEST
-	if (VRH_Available() && !VRH_ScreenMode())
-		VRH_GetProjection(r_stereo_side, nearclip, farclip, m); // per-eye asymmetric fov
-#endif
 
 	Matrix4x4_Invert_Full(&v->viewmatrix, &v->cameramatrix);
 
@@ -713,6 +709,10 @@ void R_Viewport_InitPerspective(r_viewport_t *v, const matrix4x4_t *cameramatrix
 	m[14] = -2 * nearclip * farclip / (farclip - nearclip);
 	v->screentodepth[0] = -farclip / (farclip - nearclip);
 	v->screentodepth[1] = farclip * nearclip / (farclip - nearclip);
+#ifdef VR_QUEST
+	if (VRH_Available() && !VRH_ScreenMode())
+		VRH_GetProjection(r_stereo_side, nearclip, farclip, m); // per-eye asymmetric fov
+#endif
 
 	Matrix4x4_Invert_Full(&tempmatrix, &v->cameramatrix);
 	Matrix4x4_CreateRotate(&basematrix, -90, 1, 0, 0);
