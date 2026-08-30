@@ -41,7 +41,21 @@ void  VRH_GetHMDPosition(float out_quake[3]);                  /* head pos relat
 float VRH_GetPlayerYawOffset(void);
 
 /* ---- hands ---- */
-bool  VRH_GetGun(float out_org_quake[3], float out_angles[3]); /* aim pose of the weapon hand, world space */
+extern float vr_gunorg[3];     /* world-space aim of the weapon hand (updated by VRH_GetGun) */
+extern float vr_gunangles[3];  /* Quake angles of the weapon hand incl. artificial yaw */
+bool  VRH_HasGun(void);
+bool  VRH_GetGun(const float vieworg[3], float out_org_quake[3], float out_angles[3]); /* hand pose relative to the given view origin */
+float VRH_GetWeaponScale(void);
+
+/* ---- input (called from vid_sdl.c IN_Move) ---- */
+void  VRH_HandleInput(void);
+void  VRH_AddYaw(float degrees);
+bool  VRH_GetMove(float *forward, float *side);   /* -1..1 thumbstick movement in the aim-yaw frame */
+void  VRH_SetCursor(int x, int y);
+bool  VRH_GetCursor(int *x, int *y);              /* laser-pointer cursor in screen pixels (top-left origin) */
+
+/* ---- engine helpers used by the bridge (gl_backend.c) ---- */
+void  GL_SetDefaultFramebuffer(int fbo);
 
 /* ---- misc ---- */
 void  VRH_Recenter(void);

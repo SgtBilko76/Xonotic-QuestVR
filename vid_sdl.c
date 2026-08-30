@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <stdio.h>
 
 #include "quakedef.h"
+#include "vr/vr_api.h"
 #include "image.h"
 #include "utf8lib.h"
 
@@ -944,6 +945,29 @@ void IN_Move( void )
 	keydest_t keydest = (key_consoleactive & KEY_CONSOLEACTIVE_USER) ? key_console : key_dest;
 
 	scr_numtouchscreenareas = 0;
+
+#ifdef VR_QUEST
+	if (VRH_Available())
+	{
+		float fwd, side;
+		int mx, my;
+		// the headset is the view: absolute angles, no mouse
+		VRH_GetHMDAngles(cl.viewangles);
+		if (VRH_GetMove(&fwd, &side))
+		{
+			cl.cmd.forwardmove += fwd * cl_forwardspeed.value;
+			cl.cmd.sidemove += side * cl_sidespeed.value;
+		}
+		if (VRH_GetCursor(&mx, &my))
+		{
+			in_mouse_x = mx - in_windowmouse_x;
+			in_mouse_y = my - in_windowmouse_y;
+			in_windowmouse_x = mx;
+			in_windowmouse_y = my;
+		}
+		return;
+	}
+#endif
 
 	// Only apply the new keyboard state if the input changes.
 	if (keydest != oldkeydest || !!vid_touchscreen_showkeyboard.integer != oldshowkeyboard)
@@ -1882,6 +1906,10 @@ void VID_Shutdown (void)
 
 void VID_Finish (void)
 {
+#ifdef VR_QUEST
+	if (VRH_Available())
+		return; // presented through OpenXR (VRH_SubmitFrame)
+#endif
 	VID_UpdateGamma();
 
 	if (!vid_hidden)

@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_main.c
 
 #include "quakedef.h"
+#include "vr/vr_api.h"
 #include "r_shadow.h"
 #include "polygon.h"
 #include "image.h"
@@ -5662,6 +5663,22 @@ void R_RenderView(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture, i
 	R_AnimCache_ClearCache();
 
 	/* adjust for stereo display */
+#ifdef VR_QUEST
+	if (VRH_Available() && !VRH_ScreenMode())
+	{
+		vec3_t eyeoff;
+		float tx, ty;
+		// per-eye offset from the head (view-local, Quake units)
+		VRH_GetEyeOffset(r_stereo_side, eyeoff);
+		Matrix4x4_CreateFromQuakeEntity(&offsetmatrix, eyeoff[0], eyeoff[1], eyeoff[2], 0, 0, 0, 1);
+		Matrix4x4_Concat(&r_refdef.view.matrix, &originalmatrix, &offsetmatrix);
+		// cull with the union of both eyes' fov (the projection itself is asymmetric per eye)
+		VRH_GetUnionFovTangents(&tx, &ty);
+		r_refdef.view.frustum_x = tx * cl.viewzoom;
+		r_refdef.view.frustum_y = ty * cl.viewzoom;
+	}
+	else
+#endif
 	if(R_Stereo_Active())
 	{
 		Matrix4x4_CreateFromQuakeEntity(&offsetmatrix, 0, r_stereo_separation.value * (0.5f - r_stereo_side), 0, 0, r_stereo_angle.value * (0.5f - r_stereo_side), 0, 1);

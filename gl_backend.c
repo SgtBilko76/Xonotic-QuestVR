@@ -1,5 +1,6 @@
 
 #include "quakedef.h"
+#include "vr/vr_api.h"
 #include "cl_collision.h"
 
 #define MAX_RENDERTARGETS 4
@@ -183,6 +184,16 @@ typedef struct gl_state_s
 gl_state_t;
 
 static gl_state_t gl_state;
+
+#ifdef VR_QUEST
+// VR: make an OpenXR swapchain framebuffer the engine's "screen" (render target 0)
+void GL_SetDefaultFramebuffer(int fbo)
+{
+	gl_state.defaultframebufferobject = fbo;
+	gl_state.framebufferobject = -1; // force a rebind, R_Mesh_SetRenderTargets caches the binding
+	R_Mesh_SetRenderTargets(0);
+}
+#endif
 
 
 /*
@@ -615,6 +626,10 @@ void R_Viewport_InitOrtho(r_viewport_t *v, const matrix4x4_t *cameramatrix, int 
 	}
 	v->screentodepth[0] = -farclip / (farclip - nearclip);
 	v->screentodepth[1] = farclip * nearclip / (farclip - nearclip);
+#ifdef VR_QUEST
+	if (VRH_Available() && !VRH_ScreenMode())
+		VRH_GetProjection(r_stereo_side, nearclip, farclip, m); // per-eye asymmetric fov
+#endif
 
 	Matrix4x4_Invert_Full(&v->viewmatrix, &v->cameramatrix);
 
@@ -741,6 +756,10 @@ void R_Viewport_InitPerspectiveInfinite(r_viewport_t *v, const matrix4x4_t *came
 	m[14] = -2 * nearclip * nudge;
 	v->screentodepth[0] = (m[10] + 1) * 0.5 - 1;
 	v->screentodepth[1] = m[14] * -0.5;
+#ifdef VR_QUEST
+	if (VRH_Available() && !VRH_ScreenMode())
+		VRH_GetProjection(r_stereo_side, nearclip, 0, m); // per-eye asymmetric fov
+#endif
 
 	Matrix4x4_Invert_Full(&tempmatrix, &v->cameramatrix);
 	Matrix4x4_CreateRotate(&basematrix, -90, 1, 0, 0);

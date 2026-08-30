@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // view.c -- player eye positioning
 
 #include "quakedef.h"
+#include "vr/vr_api.h"
 #include "cl_collision.h"
 #include "image.h"
 
@@ -919,6 +920,23 @@ void V_CalcRefdefUsing (const matrix4x4_t *entrendermatrix, const vec3_t clviewa
 			viewangles[1] += v_idlescale.value * sin(cl.time*v_iyaw_cycle.value) * v_iyaw_level.value;
 			viewangles[2] += v_idlescale.value * sin(cl.time*v_iroll_cycle.value) * v_iroll_level.value;
 		}
+#ifdef VR_QUEST
+		if (VRH_Available() && !VRH_ScreenMode())
+		{
+			vec3_t hmdpos, org, vrgunorg, vrgunangles;
+			VRH_GetHMDPosition(hmdpos);
+			VectorAdd(vieworg, hmdpos, org);
+			Matrix4x4_CreateFromQuakeEntity(&r_refdef.view.matrix, org[0], org[1], org[2], viewangles[0], viewangles[1], viewangles[2], 1);
+			Matrix4x4_Copy(&viewmodelmatrix_nobob, &r_refdef.view.matrix);
+			Matrix4x4_ConcatScale(&viewmodelmatrix_nobob, cl_viewmodel_scale.value);
+			if (VRH_GetGun(org, vrgunorg, vrgunangles))
+				Matrix4x4_CreateFromQuakeEntity(&viewmodelmatrix_withbob, vrgunorg[0], vrgunorg[1], vrgunorg[2], vrgunangles[0], vrgunangles[1], vrgunangles[2], VRH_GetWeaponScale());
+			else
+				Matrix4x4_CreateFromQuakeEntity(&viewmodelmatrix_withbob, gunorg[0], gunorg[1], gunorg[2], gunangles[0], gunangles[1], gunangles[2], cl_viewmodel_scale.value);
+		}
+		else
+#endif
+		{
 		Matrix4x4_CreateFromQuakeEntity(&r_refdef.view.matrix, vieworg[0], vieworg[1], vieworg[2], viewangles[0], viewangles[1], viewangles[2], 1);
 		if (v_yshearing.value > 0)
 			Matrix4x4_QuakeToDuke3D(&r_refdef.view.matrix, &r_refdef.view.matrix, v_yshearing.value);
@@ -930,6 +948,7 @@ void V_CalcRefdefUsing (const matrix4x4_t *entrendermatrix, const vec3_t clviewa
 		Matrix4x4_CreateFromQuakeEntity(&viewmodelmatrix_withbob, gunorg[0], gunorg[1], gunorg[2], gunangles[0], gunangles[1], gunangles[2], cl_viewmodel_scale.value);
 		if (v_yshearing.value > 0)
 			Matrix4x4_QuakeToDuke3D(&viewmodelmatrix_withbob, &viewmodelmatrix_withbob, v_yshearing.value);
+		}
 
 		VectorCopy(vieworg, cl.csqc_vieworiginfromengine);
 		VectorCopy(viewangles, cl.csqc_viewanglesfromengine);

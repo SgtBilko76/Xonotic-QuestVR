@@ -1,5 +1,6 @@
 
 #include "quakedef.h"
+#include "vr/vr_api.h"
 #include "cl_video.h"
 #include "image.h"
 #include "jpeg.h"
@@ -2295,6 +2296,36 @@ void CL_UpdateScreen(void)
 		Cvar_SetValueQuick(&scr_stipple, 0);
 	}
 
+#ifdef VR_QUEST
+	if (VRH_Available())
+	{
+		// VR: xrWaitFrame paces the engine; render each eye into its swapchain image
+		if (VRH_FrameSetup())
+		{
+			int eye, numeyes = VRH_ScreenMode() ? 1 : 2;
+			for (eye = 0; eye < numeyes; eye++)
+			{
+				VRH_BeginEye(eye);
+				R_Viewport_InitOrtho(&viewport, &identitymatrix, 0, 0, vid.mode.width, vid.mode.height, 0, 0, vid_conwidth.integer, vid_conheight.integer, -10, 100, NULL);
+				R_Mesh_SetRenderTargets(0);
+				R_SetViewport(&viewport);
+				GL_ScissorTest(false);
+				GL_ColorMask(1,1,1,1);
+				GL_DepthMask(true);
+				R_ClearScreen(false);
+				r_refdef.view.clear = false;
+				r_refdef.view.isoverlay = false;
+				r_refdef.view.quality = cl_updatescreen_quality;
+				SCR_DrawScreen();
+				VRH_EndEye(eye);
+			}
+			r_stereo_side = 0;
+			qglFlush();
+			VRH_SubmitFrame();
+		}
+		return;
+	}
+#endif
 #ifndef USE_GLES2
 	if (R_Stereo_Active())
 	{

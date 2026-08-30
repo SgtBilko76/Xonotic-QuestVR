@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // host.c -- coordinates spawning and killing of local servers
 
 #include "quakedef.h"
+#include "vr/vr_api.h"
 
 #include <time.h>
 #include "libcurl.h"
@@ -496,6 +497,10 @@ void Host_Init (void)
 	Cbuf_Execute(cmd_local->cbuf); // cannot be in Host_AddConfigText as that would cause Host_LoadConfig_f to loop!
 
 	CL_StartVideo();
+
+#ifdef VR_QUEST
+	VRH_Init(); // needs the GL context created by CL_StartVideo
+#endif
 
 	Log_Start();
 
