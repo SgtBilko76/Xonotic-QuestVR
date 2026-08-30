@@ -55,6 +55,12 @@ void VR_GetResolution(engine_t* engine, int *pWidth, int *pHeight) {
 
 		width = engine->appState.ViewConfigurationView[0].recommendedImageRectWidth;
 		height = engine->appState.ViewConfigurationView[0].recommendedImageRectHeight;
+		// the runtime's recommendation fluctuates between boots (1680x1760 vs 2800x2933 on Quest 3);
+		// clamp to the panel-native baseline so resolution is deterministic and supersampling means one thing
+		if (width > 1680) {
+			height = (int)((long long)height * 1680 / width);
+			width = 1680;
+		}
 		ALOGV("Recommended eye buffer: %ix%i (max %ix%i)", width, height,
 				engine->appState.ViewConfigurationView[0].maxImageRectWidth,
 				engine->appState.ViewConfigurationView[0].maxImageRectHeight);
