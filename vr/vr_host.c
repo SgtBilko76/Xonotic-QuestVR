@@ -433,6 +433,9 @@ void VRH_GetProjection(int eye, float znear, float zfar, float m16[16])
 {
 	XrFovf fov = VR_GetFov(bound(0, eye, 1));
 	float l = tanf(fov.angleLeft), r = tanf(fov.angleRight), d = tanf(fov.angleDown), u = tanf(fov.angleUp);
+	// sniper zoom: render a narrower frustum into the same eye fov -> magnification
+	float zoom = (cl.viewzoom > 0.01f && cl.viewzoom < 1.0f) ? cl.viewzoom : 1.0f;
+	l *= zoom; r *= zoom; u *= zoom; d *= zoom;
 	(void)znear; (void)zfar;
 	// asymmetric frustum: only the x/y scale and offset terms differ from DarkPlaces' symmetric matrix
 	m16[0] = 2.0f / (r - l);
