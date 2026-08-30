@@ -761,11 +761,14 @@ void CSQC_R_RecalcView (void)
 #ifdef VR_QUEST
 	if (VRH_Available() && !VRH_ScreenMode())
 	{
-		vec3_t hmdpos, org, gunorg, gunangles;
+		vec3_t hmdpos, hmdang, org, gunorg, gunangles;
 		// positional tracking: offset the camera from the player's eye position
 		VRH_GetHMDPosition(hmdpos);
 		VectorAdd(cl.csqc_vieworigin, hmdpos, org);
-		Matrix4x4_CreateFromQuakeEntity(&r_refdef.view.matrix, org[0], org[1], org[2], cl.csqc_viewangles[0], cl.csqc_viewangles[1], cl.csqc_viewangles[2], 1);
+		// the headset is authoritative for the view orientation: CSQC echoes the *input* angles
+		// (which aim along the controller), and those must never steer the head
+		VRH_GetHMDAngles(hmdang);
+		Matrix4x4_CreateFromQuakeEntity(&r_refdef.view.matrix, org[0], org[1], org[2], hmdang[0], hmdang[1], hmdang[2], 1);
 		Matrix4x4_Copy(&viewmodelmatrix_nobob, &r_refdef.view.matrix);
 		Matrix4x4_ConcatScale(&viewmodelmatrix_nobob, cl_viewmodel_scale.value);
 		// the weapon (a CSQC RENDER_VIEWMODEL entity) follows the controller
