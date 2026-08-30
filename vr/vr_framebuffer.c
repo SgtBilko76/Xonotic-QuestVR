@@ -127,9 +127,10 @@ bool ovrFramebuffer_Create(
 	frameBuffer->ColorSwapChain.Width = swapChainCreateInfo.width;
 	frameBuffer->ColorSwapChain.Height = swapChainCreateInfo.height;
 
-	// Create the color swapchain. DarkPlaces' GLES path outputs display-referred (gamma) colour, so a
-	// linear-tagged RGBA8 image is presented unchanged by the compositor.
-	swapChainCreateInfo.format = GL_RGBA8;
+	// Create the color swapchain as sRGB and disable GL's linear->sRGB write conversion below:
+	// DarkPlaces' GLES path outputs display-referred (gamma) colour, so the raw values pass through
+	// and the compositor's sRGB decode restores the intended contrast (linear RGBA8 washed it out).
+	swapChainCreateInfo.format = GL_SRGB8_ALPHA8;
 	swapChainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
 	OXR(xrCreateSwapchain(session, &swapChainCreateInfo, &frameBuffer->ColorSwapChain.Handle));
 
@@ -327,7 +328,13 @@ void ovrFramebuffer_Destroy(ovrFramebuffer* frameBuffer) {
 void ovrFramebuffer_SetCurrent(ovrFramebuffer* frameBuffer) {
 	GL(glBindFramebuffer(
 			GL_FRAMEBUFFER, frameBuffer->FrameBuffers[frameBuffer->TextureSwapChainIndex]));
+	// write gamma-space values raw into the sRGB image (GL_EXT_sRGB_write_control, present on Adreno)
+	glDisable(GL_FRAMEBUFFER_SRGB_EXT);
 }
+
+#ifndef GL_FRAMEBUFFER_SRGB_EXT
+#define GL_FRAMEBUFFER_SRGB_EXT 0x8DB9
+#endif
 
 unsigned int ovrFramebuffer_GetCurrentFBO(ovrFramebuffer* frameBuffer) {
 	return frameBuffer->FrameBuffers[frameBuffer->TextureSwapChainIndex];
