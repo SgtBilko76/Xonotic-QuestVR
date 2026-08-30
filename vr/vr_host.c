@@ -96,6 +96,31 @@ static void RotateYaw(float v[3], float yaw)
 	v[1] = x * s + y * c;
 }
 
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+#include <EGL/egl.h>
+
+static int vrh_gldebug_count = 0;
+static void GL_APIENTRY VRH_GLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam)
+{
+	(void)source; (void)id; (void)length; (void)userParam;
+	if (severity == GL_DEBUG_SEVERITY_NOTIFICATION_KHR)
+		return;
+	if (vrh_gldebug_count++ < 200)
+		__android_log_print(ANDROID_LOG_WARN, "XonoticGL", "type %x severity %x: %s", type, severity, message);
+}
+
+static void VRH_InitGLDebug(void)
+{
+	PFNGLDEBUGMESSAGECALLBACKKHRPROC pfnCallback = (PFNGLDEBUGMESSAGECALLBACKKHRPROC)eglGetProcAddress("glDebugMessageCallbackKHR");
+	if (!pfnCallback || !Sys_CheckParm("-gldebug"))
+		return;
+	glEnable(GL_DEBUG_OUTPUT_KHR);
+	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR);
+	pfnCallback(VRH_GLDebugCallback, NULL);
+	VRH_Log("KHR_debug output enabled");
+}
+
 static void VRH_InitPlatformFlags(void)
 {
 	const char *manufacturer = getenv("xr_manufacturer");
@@ -174,6 +199,7 @@ void VRH_Init(void)
 	java.ActivityObject = activity;
 	(*env)->GetJavaVM(env, &java.Vm);
 
+	VRH_InitGLDebug();
 	VRH_InitPlatformFlags();
 	VR_Init(&java, "Xonotic", 1);
 
