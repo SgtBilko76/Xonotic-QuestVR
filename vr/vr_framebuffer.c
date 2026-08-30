@@ -333,6 +333,18 @@ void ovrFramebuffer_Destroy(ovrFramebuffer* frameBuffer) {
 }
 
 void ovrFramebuffer_SetCurrent(ovrFramebuffer* frameBuffer) {
+	// drain errors the engine left pending (e.g. texture uploads during map load) so the
+	// GL() check below reports only errors caused by the bind itself
+	{
+		static int reported = 0;
+		GLenum err;
+		while ((err = glGetError()) != GL_NO_ERROR) {
+			if (reported < 20) {
+				ALOGV("engine left GL error 0x%x pending before eye framebuffer bind", err);
+				reported++;
+			}
+		}
+	}
 	GL(glBindFramebuffer(
 			GL_FRAMEBUFFER, frameBuffer->FrameBuffers[frameBuffer->TextureSwapChainIndex]));
 	// write gamma-space values raw into the sRGB image (GL_EXT_sRGB_write_control, present on Adreno)
