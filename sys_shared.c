@@ -615,10 +615,14 @@ STDIO
 void Sys_Print(const char *text, size_t textlen)
 {
 #ifdef __ANDROID__
+#ifdef VR_QUEST
+	__android_log_write(ANDROID_LOG_INFO, "Xonotic", text);
+#else
 	if (developer.integer > 0)
 	{
 		__android_log_write(ANDROID_LOG_DEBUG, sys.argv[0], text);
 	}
+#endif
 #else
 	if(sys.outfd < 0)
 		return;
