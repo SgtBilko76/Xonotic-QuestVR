@@ -204,7 +204,9 @@ void listdirectory(stringlist_t *list, const char *basepath, const char *path)
 #ifdef __ANDROID__
 	// SDL currently does not support listing assets, so we have to emulate
 	// it. We're using relative paths for assets, so that will do.
-	if (basepath[0] != '/')
+	// Absolute paths (e.g. /sdcard/XonoticVR/data) are real directories: list them normally
+	// instead of requiring an ls.txt manifest (a stale manifest silently hides pk3s).
+	if (basepath[0] != '/' && fullpath[0] != '/')
 	{
 		char listpath[MAX_OSPATH];
 		qfile_t *listfile;
