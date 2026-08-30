@@ -82,6 +82,9 @@ void VR_GetResolution(engine_t* engine, int *pWidth, int *pHeight) {
 			*pWidth = maxWidth;
 		}
 	}
+	// QCOM tiled foveation wants tile-aligned buffers; unaligned sizes cause visible artifacts
+	*pWidth &= ~31;
+	*pHeight &= ~31;
 	// keep dimensions even
 	*pWidth &= ~1;
 	*pHeight &= ~1;
