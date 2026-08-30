@@ -3256,7 +3256,18 @@ void CL_GetEntityMatrix (prvm_prog_t *prog, prvm_edict_t *ent, matrix4x4_t *out,
 		scale = 1.0f;
 
 	if(viewmatrix)
+	{
+#ifdef VR_QUEST
+		// VR: view-attached entities (the weapon) hang off the controller, not the camera
+		extern matrix4x4_t viewmodelmatrix_withbob;
+		if (VRH_Available() && !VRH_ScreenMode() && VRH_HasGun())
+		{
+			*out = viewmodelmatrix_withbob;
+			return;
+		}
+#endif
 		*out = r_refdef.view.matrix;
+	}
 	else if ((int)PRVM_clientedictfloat(ent, renderflags) & RF_USEAXIS)
 	{
 		vec3_t forward;

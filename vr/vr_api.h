@@ -56,6 +56,10 @@ bool  VRH_GetMove(float *forward, float *side);   /* -1..1 thumbstick movement i
 void  VRH_SetCursor(int x, int y);
 bool  VRH_GetCursor(int *x, int *y);              /* laser-pointer cursor in screen pixels (top-left origin) */
 
+/* ---- laser sight (vr/r_lasersight.c) ---- */
+void  R_LaserSights_Init(void);
+void  R_DrawLaserSights(void);
+
 /* ---- engine helpers used by the bridge (gl_backend.c) ---- */
 void  GL_SetDefaultFramebuffer(int fbo);
 
