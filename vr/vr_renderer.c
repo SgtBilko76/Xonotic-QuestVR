@@ -15,6 +15,7 @@
 static XrView projections[ovrMaxNumEyes];
 static XrPosef headPose;
 static bool headTracked = false;
+static bool menuYawValid = false;   /* flat screen placed in front of the user? */
 static bool initialized = false;
 static bool recenterCalled = false;
 static bool stageBoundsDirty = true;
@@ -90,63 +91,76 @@ void VR_GetResolution(engine_t* engine, int *pWidth, int *pHeight) {
 }
 
 void VR_Recenter(engine_t* engine) {
-
-	// Calculate recenter reference
 	XrReferenceSpaceCreateInfo spaceCreateInfo;
+	XrSpace newFake = XR_NULL_HANDLE, newStage = XR_NULL_HANDLE;
+	XrResult r;
+	float recenterYaw;
+
 	memset(&spaceCreateInfo, 0, sizeof(spaceCreateInfo));
 	spaceCreateInfo.type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO;
 	spaceCreateInfo.poseInReferenceSpace = XrPosef_Identity();
-	if (engine->appState.CurrentSpace != XR_NULL_HANDLE) {
+
+	// Accumulate the current head yaw into the recenter yaw - only with a usable frame time and space
+	// (the runtime sends reference-space events before the first frame; xrLocateSpace fails then).
+	if (engine->appState.CurrentSpace != XR_NULL_HANDLE && engine->predictedDisplayTime > 0 && engine->appState.SessionActive) {
 		XrSpaceLocation loc;
 		memset(&loc, 0, sizeof(loc));
 		loc.type = XR_TYPE_SPACE_LOCATION;
-		OXR(xrLocateSpace(engine->appState.HeadSpace, engine->appState.CurrentSpace, engine->predictedDisplayTime, &loc));
-		XrVector3f hmdangles = XrQuaternionf_ToEulerAngles(loc.pose.orientation);
-
-		VR_SetConfigFloat(VR_CONFIG_RECENTER_YAW, VR_GetConfigFloat(VR_CONFIG_RECENTER_YAW) + hmdangles.y);
-		float recenterYaw = ToRadians(VR_GetConfigFloat(VR_CONFIG_RECENTER_YAW));
-		spaceCreateInfo.poseInReferenceSpace.orientation.x = 0;
-		spaceCreateInfo.poseInReferenceSpace.orientation.y = sinf(recenterYaw / 2);
-		spaceCreateInfo.poseInReferenceSpace.orientation.z = 0;
-		spaceCreateInfo.poseInReferenceSpace.orientation.w = cosf(recenterYaw / 2);
+		r = xrLocateSpace(engine->appState.HeadSpace, engine->appState.CurrentSpace, engine->predictedDisplayTime, &loc);
+		if (XR_SUCCEEDED(r) && (loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) {
+			XrVector3f hmdangles = XrQuaternionf_ToEulerAngles(loc.pose.orientation);
+			if (hmdangles.y == hmdangles.y) /* not NaN */
+				VR_SetConfigFloat(VR_CONFIG_RECENTER_YAW, VR_GetConfigFloat(VR_CONFIG_RECENTER_YAW) + hmdangles.y);
+		}
 	}
+	recenterYaw = ToRadians(VR_GetConfigFloat(VR_CONFIG_RECENTER_YAW));
+	if (recenterYaw != recenterYaw) { recenterYaw = 0; VR_SetConfigFloat(VR_CONFIG_RECENTER_YAW, 0); }
+	spaceCreateInfo.poseInReferenceSpace.orientation.x = 0;
+	spaceCreateInfo.poseInReferenceSpace.orientation.y = sinf(recenterYaw / 2);
+	spaceCreateInfo.poseInReferenceSpace.orientation.z = 0;
+	spaceCreateInfo.poseInReferenceSpace.orientation.w = cosf(recenterYaw / 2);
 
-	// Delete previous space instances
-	if (engine->appState.StageSpace != XR_NULL_HANDLE) {
-		OXR(xrDestroySpace(engine->appState.StageSpace));
-		engine->appState.StageSpace = XR_NULL_HANDLE;
-	}
-	if (engine->appState.FakeStageSpace != XR_NULL_HANDLE) {
-		OXR(xrDestroySpace(engine->appState.FakeStageSpace));
-		engine->appState.FakeStageSpace = XR_NULL_HANDLE;
-	}
-
-	// Create a default stage space to use if SPACE_TYPE_STAGE is not
-	// supported, or calls to xrGetReferenceSpaceBoundsRect fail.
+	// LOCAL space with a floor offset: always available
 	spaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
 	if (VR_GetPlatformFlag(VR_PLATFORM_TRACKING_FLOOR)) {
 		spaceCreateInfo.poseInReferenceSpace.position.y = -1.6750f;
 	}
-	OXR(xrCreateReferenceSpace(engine->appState.Session, &spaceCreateInfo, &engine->appState.FakeStageSpace));
-	engine->appState.CurrentSpace = engine->appState.FakeStageSpace;
-
-	if (stageSupported) {
-		XrResult r;
-		spaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
-		spaceCreateInfo.poseInReferenceSpace.position.y = 0.0;
-		OXR(r = xrCreateReferenceSpace(engine->appState.Session, &spaceCreateInfo, &engine->appState.StageSpace));
-		if (XR_FAILED(r) || engine->appState.StageSpace == XR_NULL_HANDLE) {
-			// no boundary / stage in this location: keep the floor-offset LOCAL space
-			ALOGE("STAGE reference space unavailable, using LOCAL space with floor offset");
-			engine->appState.StageSpace = XR_NULL_HANDLE;
-		} else if (VR_GetPlatformFlag(VR_PLATFORM_TRACKING_FLOOR)) {
-			engine->appState.CurrentSpace = engine->appState.StageSpace;
+	OXR(r = xrCreateReferenceSpace(engine->appState.Session, &spaceCreateInfo, &newFake));
+	if (XR_FAILED(r) || newFake == XR_NULL_HANDLE) {
+		// retry with an identity pose; keep the previous spaces if even that fails
+		spaceCreateInfo.poseInReferenceSpace = XrPosef_Identity();
+		if (VR_GetPlatformFlag(VR_PLATFORM_TRACKING_FLOOR))
+			spaceCreateInfo.poseInReferenceSpace.position.y = -1.6750f;
+		OXR(r = xrCreateReferenceSpace(engine->appState.Session, &spaceCreateInfo, &newFake));
+		if (XR_FAILED(r) || newFake == XR_NULL_HANDLE) {
+			ALOGE("VR_Recenter: could not create a reference space, keeping the old one");
+			return;
 		}
 	}
+
+	// STAGE space (floor level, boundary origin) when the runtime has one
+	if (stageSupported) {
+		spaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
+		spaceCreateInfo.poseInReferenceSpace.position.y = 0.0;
+		r = xrCreateReferenceSpace(engine->appState.Session, &spaceCreateInfo, &newStage);
+		if (XR_FAILED(r)) {
+			ALOGE("STAGE reference space unavailable (%d), using LOCAL space with floor offset", r);
+			newStage = XR_NULL_HANDLE;
+		}
+	}
+
+	// swap in the new spaces
+	if (engine->appState.StageSpace != XR_NULL_HANDLE)
+		xrDestroySpace(engine->appState.StageSpace);
+	if (engine->appState.FakeStageSpace != XR_NULL_HANDLE)
+		xrDestroySpace(engine->appState.FakeStageSpace);
+	engine->appState.FakeStageSpace = newFake;
+	engine->appState.StageSpace = newStage;
+	engine->appState.CurrentSpace = (newStage != XR_NULL_HANDLE && VR_GetPlatformFlag(VR_PLATFORM_TRACKING_FLOOR)) ? newStage : newFake;
 	ALOGV("VR_Recenter: CurrentSpace=%p (stage=%p fake=%p)", (void*)engine->appState.CurrentSpace, (void*)engine->appState.StageSpace, (void*)engine->appState.FakeStageSpace);
 
-	// Update menu orientation
-	VR_SetConfigFloat(VR_CONFIG_MENU_YAW, 0.0f);
+	// Update menu orientation: re-place the flat screen on the next frame
+	menuYawValid = false;
 	stageBoundsDirty = true;
 	recenterCalled = true;
 }
@@ -304,7 +318,9 @@ void VR_FinishFrame( engine_t* engine ) {
 	XrCompositionLayerProjectionView projection_layer_elements[2];
 	memset(projection_layer_elements, 0, sizeof(projection_layer_elements));
 	if (vrMode == VR_MODE_STEREO_6DOF) {
+		// keep the flat screen ready to appear in front of the user when it is next shown
 		VR_SetConfigFloat(VR_CONFIG_MENU_YAW, XrQuaternionf_ToEulerAngles(headPose.orientation).y);
+		menuYawValid = false;
 
 		for (int eye = 0; eye < ovrMaxNumEyes; eye++) {
 			ovrFramebuffer* frameBuffer = &engine->appState.Renderer.FrameBuffer[eye];
@@ -333,6 +349,11 @@ void VR_FinishFrame( engine_t* engine ) {
 		int sh = vrConfig[VR_CONFIG_SCREEN_HEIGHT];
 		float distance = VR_GetConfigFloat(VR_CONFIG_CANVAS_DISTANCE);
 		if (distance <= 0.5f) distance = 5.0f;
+		// place the screen where the user is looking when it appears (and after a recenter)
+		if (!menuYawValid && headTracked) {
+			VR_SetConfigFloat(VR_CONFIG_MENU_YAW, XrQuaternionf_ToEulerAngles(headPose.orientation).y);
+			menuYawValid = true;
+		}
 		float menuYaw = ToRadians(VR_GetConfigFloat(VR_CONFIG_MENU_YAW));
 		XrVector3f yawAxis = {0, 1, 0};
 		XrQuaternionf yaw = XrQuaternionf_CreateFromVectorAngle(yawAxis, menuYaw);
