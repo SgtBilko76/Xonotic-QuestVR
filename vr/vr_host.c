@@ -637,9 +637,9 @@ void VRH_HandleInput(void)
 	{
 		VRH_Button(hand, b[hand], ovrButton_Trigger, K_MOUSE1);          /* +fire */
 		VRH_Button(hand, b[hand], ovrButton_GripTrigger, K_MOUSE2);      /* +fire2 */
-		VRH_Button(offhand, b[offhand], ovrButton_Trigger, K_MOUSE3);    /* +zoom */
+		VRH_Button(offhand, b[offhand], ovrButton_Trigger, K_SPACE);     /* +jump */
 		VRH_Button(offhand, b[offhand], ovrButton_GripTrigger, K_MOUSE4);/* +hook */
-		VRH_Button(1, b[1], ovrButton_A, K_SPACE);                       /* +jump */
+		VRH_Button(1, b[1], ovrButton_A, K_MOUSE3);                      /* +zoom */
 		VRH_Button(1, b[1], ovrButton_B, K_CTRL);                        /* +crouch */
 		VRH_Button(0, b[0], ovrButton_X, K_JOY1);                        /* bindable (default: +use) */
 		VRH_Button(0, b[0], ovrButton_Y, K_TAB);                         /* scoreboard */
