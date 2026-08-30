@@ -41,6 +41,7 @@ void  VRH_GetUnionFovTangents(float *tanx, float *tany);
 void  VRH_GetHMDAngles(float out_pitch_yaw_roll[3]);           /* Quake angles incl. artificial yaw */
 void  VRH_GetHMDPosition(float out_quake[3]);                  /* head pos relative to recenter origin, Quake units */
 float VRH_GetPlayerYawOffset(void);
+void  VRH_ServerSetAngles(const float angles[3]);  /* spawn/teleport fixangle -> rotate the artificial yaw */
 
 /* ---- hands ---- */
 extern float vr_gunorg[3];     /* world-space aim of the weapon hand (updated by VRH_GetGun) */
