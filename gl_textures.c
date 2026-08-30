@@ -1076,7 +1076,7 @@ static void R_UploadFullTexture(gltexture_t *glt, const unsigned char *data)
 				}
 				break;
 			case GLTEXTURETYPE_3D:
-#ifndef USE_GLES2
+#if !defined(USE_GLES2) || defined(VR_QUEST) // 3D textures are core in the ES 3.0 context the Quest build uses
 				qglTexImage3D(GL_TEXTURE_3D, mip++, glt->glinternalformat, width, height, depth, 0, glt->glformat, glt->gltype, prevbuffer);CHECKGLERROR
 				if (glt->flags & TEXF_MIPMAP)
 				{
