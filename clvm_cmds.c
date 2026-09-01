@@ -761,10 +761,12 @@ void CSQC_R_RecalcView (void)
 #ifdef VR_QUEST
 	if (VRH_Available() && !VRH_ScreenMode())
 	{
+		extern void V_VRClampHeadPosition(const vec3_t base, vec3_t head);
 		vec3_t hmdpos, hmdang, org, gunorg, gunangles;
 		// positional tracking: offset the camera from the player's eye position
 		VRH_GetHMDPosition(hmdpos);
 		VectorAdd(cl.csqc_vieworigin, hmdpos, org);
+		V_VRClampHeadPosition(cl.csqc_vieworigin, org);
 		// the headset is authoritative for the view orientation: CSQC echoes the *input* angles
 		// (which aim along the controller), and those must never steer the head
 		VRH_GetHMDAngles(hmdang);
