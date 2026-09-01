@@ -392,6 +392,22 @@ extern matrix4x4_t viewmodelmatrix_withbob;
 #include "cl_collision.h"
 #include "csprogs.h"
 
+#ifdef VR_QUEST
+// keep the head-tracked camera out of world geometry: leaning into a wall would otherwise
+// carry the eyes (and the near clip plane) through the surface and show the map background
+void V_VRClampHeadPosition(const vec3_t base, vec3_t head)
+{
+	trace_t trace;
+	vec3_t mins = {-4.0f, -4.0f, -4.0f};
+	vec3_t maxs = {4.0f, 4.0f, 4.0f};
+	if (!cl.worldmodel)
+		return;
+	trace = CL_TraceBox(base, mins, maxs, head, MOVE_NOMONSTERS, NULL, SUPERCONTENTS_SOLID | SUPERCONTENTS_SKY, 0, MATERIALFLAGMASK_TRANSLUCENT, collision_extendmovelength.value, true, false, NULL, false);
+	if (trace.fraction < 1)
+		VectorCopy(trace.endpos, head);
+}
+#endif
+
 /*
 ==================
 V_CalcRefdef
@@ -933,6 +949,7 @@ void V_CalcRefdefUsing (const matrix4x4_t *entrendermatrix, const vec3_t clviewa
 			vec3_t hmdpos, org, vrgunorg, vrgunangles;
 			VRH_GetHMDPosition(hmdpos);
 			VectorAdd(vieworg, hmdpos, org);
+			V_VRClampHeadPosition(vieworg, org);
 			Matrix4x4_CreateFromQuakeEntity(&r_refdef.view.matrix, org[0], org[1], org[2], viewangles[0], viewangles[1], viewangles[2], 1);
 			Matrix4x4_Copy(&viewmodelmatrix_nobob, &r_refdef.view.matrix);
 			Matrix4x4_ConcatScale(&viewmodelmatrix_nobob, cl_viewmodel_scale.value);
