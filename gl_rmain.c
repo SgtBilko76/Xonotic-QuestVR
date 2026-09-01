@@ -5672,10 +5672,17 @@ void R_RenderView(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture, i
 		VRH_GetEyeOffset(r_stereo_side, eyeoff, eyeang);
 		Matrix4x4_CreateFromQuakeEntity(&offsetmatrix, eyeoff[0], eyeoff[1], eyeoff[2], eyeang[0], eyeang[1], eyeang[2], 1);
 		Matrix4x4_Concat(&r_refdef.view.matrix, &originalmatrix, &offsetmatrix);
+		// Xonotic's CSQC zooms by narrowing the fov it requests via VF_FOV (cl.viewzoom stays 1):
+		// recover the zoom factor from the requested vertical tangent against the fov cvar's
+		// baseline (CSQC computes frustumy = tan(fov/2) * 0.75 * viewzoom)
+		{
+			float basetany = (float)tan(scr_fov.value * M_PI / 360.0) * 0.75f;
+			VRH_SetZoom(basetany > 0.001f ? r_refdef.view.frustum_y / basetany : 1.0f);
+		}
 		// cull with the union of both eyes' fov (the projection itself is asymmetric per eye)
 		VRH_GetUnionFovTangents(&tx, &ty);
-		r_refdef.view.frustum_x = tx * cl.viewzoom;
-		r_refdef.view.frustum_y = ty * cl.viewzoom;
+		r_refdef.view.frustum_x = tx * VRH_GetZoom();
+		r_refdef.view.frustum_y = ty * VRH_GetZoom();
 	}
 	else
 #endif
