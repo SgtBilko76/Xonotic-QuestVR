@@ -38,6 +38,8 @@ bool  VRH_ScreenMode(void);         /* true: menu/console/loading -> mono render
 void  VRH_GetEyeOffset(int eye, float out_quake[3], float out_angles[3]); /* eye pose relative to the head: Quake units / Quake angles */
 void  VRH_GetProjection(int eye, float znear, float zfar, float m16[16]);
 void  VRH_GetUnionFovTangents(float *tanx, float *tany);
+void  VRH_SetZoom(float zoom);         /* 0..1 fov-tangent ratio; derived from the CSQC-requested fov */
+float VRH_GetZoom(void);
 void  VRH_GetHMDAngles(float out_pitch_yaw_roll[3]);           /* Quake angles incl. artificial yaw */
 void  VRH_GetHMDPosition(float out_quake[3]);                  /* head pos relative to recenter origin, Quake units */
 float VRH_GetPlayerYawOffset(void);

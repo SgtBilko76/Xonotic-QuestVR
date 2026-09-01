@@ -424,12 +424,30 @@ void VRH_GetEyeOffset(int eye, float out[3], float out_angles[3])
 	VectorCopy(vrh_eyeangles[eye], out_angles);
 }
 
+/* Xonotic zooms in CSQC by narrowing its requested fov (the Quake STAT_VIEWZOOM protocol
+ * stat stays 1), so the zoom factor is recovered from the requested frustum each frame
+ * (see R_RenderView) and stored here for the projection. */
+static float vrh_zoom = 1.0f;
+
+void VRH_SetZoom(float zoom)
+{
+	vrh_zoom = bound(0.03f, zoom, 1.0f);
+	// snap tiny ratios from float error / velocity-zoom drift back to no-zoom
+	if (vrh_zoom > 0.98f)
+		vrh_zoom = 1.0f;
+}
+
+float VRH_GetZoom(void)
+{
+	return vrh_zoom;
+}
+
 void VRH_GetProjection(int eye, float znear, float zfar, float m16[16])
 {
 	XrFovf fov = VR_GetFov(bound(0, eye, 1));
 	float l = tanf(fov.angleLeft), r = tanf(fov.angleRight), d = tanf(fov.angleDown), u = tanf(fov.angleUp);
 	// sniper zoom: render a narrower frustum into the same eye fov -> magnification
-	float zoom = (cl.viewzoom > 0.01f && cl.viewzoom < 1.0f) ? cl.viewzoom : 1.0f;
+	float zoom = vrh_zoom;
 	l *= zoom; r *= zoom; u *= zoom; d *= zoom;
 	(void)znear; (void)zfar;
 	// asymmetric frustum: only the x/y scale and offset terms differ from DarkPlaces' symmetric matrix
