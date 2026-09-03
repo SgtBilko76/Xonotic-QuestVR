@@ -4437,7 +4437,7 @@ void R_EntityMatrix(const matrix4x4_t *matrix)
 	}
 }
 
-void R_ResetViewRendering2D_Common(int viewfbo, rtexture_t *viewdepthtexture, rtexture_t *viewcolortexture, int viewx, int viewy, int viewwidth, int viewheight, float x2, float y2)
+void R_ResetViewRendering2D_Ortho(int viewfbo, rtexture_t *viewdepthtexture, rtexture_t *viewcolortexture, int viewx, int viewy, int viewwidth, int viewheight, float x1, float y1, float x2, float y2)
 {
 	r_viewport_t viewport;
 	int viewy_adjusted;
@@ -4448,7 +4448,7 @@ void R_ResetViewRendering2D_Common(int viewfbo, rtexture_t *viewdepthtexture, rt
 	// Unless the render target is a FBO...
 	viewy_adjusted = viewfbo ? viewy : vid.mode.height - viewheight - viewy;
 
-	R_Viewport_InitOrtho(&viewport, &identitymatrix, viewx, viewy_adjusted, viewwidth, viewheight, 0, 0, x2, y2, -10, 100, NULL);
+	R_Viewport_InitOrtho(&viewport, &identitymatrix, viewx, viewy_adjusted, viewwidth, viewheight, x1, y1, x2, y2, -10, 100, NULL);
 	R_Mesh_SetRenderTargets(viewfbo);
 	R_SetViewport(&viewport);
 	GL_Scissor(viewport.x, viewport.y, viewport.width, viewport.height);
@@ -4473,6 +4473,11 @@ void R_ResetViewRendering2D_Common(int viewfbo, rtexture_t *viewdepthtexture, rt
 	GL_CullFace(GL_NONE);
 
 	CHECKGLERROR
+}
+
+void R_ResetViewRendering2D_Common(int viewfbo, rtexture_t *viewdepthtexture, rtexture_t *viewcolortexture, int viewx, int viewy, int viewwidth, int viewheight, float x2, float y2)
+{
+	R_ResetViewRendering2D_Ortho(viewfbo, viewdepthtexture, viewcolortexture, viewx, viewy, viewwidth, viewheight, 0, 0, x2, y2);
 }
 
 void R_ResetViewRendering2D(int viewfbo, rtexture_t *viewdepthtexture, rtexture_t *viewcolortexture, int viewx, int viewy, int viewwidth, int viewheight)

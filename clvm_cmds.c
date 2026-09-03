@@ -1258,6 +1258,15 @@ static void VM_CL_project (prvm_prog_t *prog)
 
 	VM_SAFEPARMCOUNT(1, VM_CL_project);
 	VectorCopy(PRVM_G_VECTOR(OFS_PARM0), f);
+#ifdef VR_QUEST
+	// VR: asymmetric per-eye projection and the shrunken HUD canvas make the symmetric
+	// formula below land on the wrong pixel (this is what places Xonotic's crosshair)
+	if (VRH_Available() && VRH_ProjectPoint(f, v))
+	{
+		VectorCopy(v, PRVM_G_VECTOR(OFS_RETURN));
+		return;
+	}
+#endif
 	Matrix4x4_Invert_Full(&m, &r_refdef.view.matrix);
 	Matrix4x4_Transform(&m, f, v);
 	if(v_flipped.integer)

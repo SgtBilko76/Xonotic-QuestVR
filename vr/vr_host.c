@@ -465,6 +465,49 @@ void VRH_GetProjection(int eye, float znear, float zfar, float m16[16])
 	}
 }
 
+/* project a world point the way the current eye renders it and return 2D con coordinates
+ * of the HUD canvas (what CSQC's cs_project / project_3d_to_2d expects), so things Xonotic
+ * places by projection - the crosshair, waypoint sprites - land on the right pixel per eye */
+bool VRH_ProjectPoint(const float world[3], float out_con[3])
+{
+	matrix4x4_t offset, eyematrix, inv;
+	vec3_t eyeoff, eyeang, v;
+	XrFovf fov;
+	float l, r, d, u, fx, fy, fwd;
+	int eye = bound(0, r_stereo_side, 1);
+	int hx, hy, hw, hh;
+	if (!vrh_session || vrh_screenmode)
+		return false;
+	// r_refdef.view.matrix is the head pose (R_RenderView restores it after drawing the eye)
+	VRH_GetEyeOffset(eye, eyeoff, eyeang);
+	Matrix4x4_CreateFromQuakeEntity(&offset, eyeoff[0], eyeoff[1], eyeoff[2], eyeang[0], eyeang[1], eyeang[2], 1);
+	Matrix4x4_Concat(&eyematrix, &r_refdef.view.matrix, &offset);
+	Matrix4x4_Invert_Full(&inv, &eyematrix);
+	Matrix4x4_Transform(&inv, world, v);
+	fov = VR_GetFov(eye);
+	l = tanf(fov.angleLeft) * vrh_zoom;
+	r = tanf(fov.angleRight) * vrh_zoom;
+	d = tanf(fov.angleDown) * vrh_zoom;
+	u = tanf(fov.angleUp) * vrh_zoom;
+	fwd = v[0];
+	if (fabsf(fwd) < 0.0001f)
+		fwd = fwd < 0 ? -0.0001f : 0.0001f;
+	// Quake view space: x forward, y left, z up; fraction across the asymmetric eye frustum
+	fx = (-v[1] / fwd - l) / (r - l);
+	fy = (u - v[2] / fwd) / (u - d);
+	// eye pixel -> con coordinates of the (smaller, shifted) HUD canvas of this eye
+	if (!VRH_GetHudRect(&hx, &hy, &hw, &hh))
+	{
+		hx = hy = 0;
+		hw = vid.mode.width;
+		hh = vid.mode.height;
+	}
+	out_con[0] = (fx * vid.mode.width - hx) * vid_conwidth.integer / (float)hw;
+	out_con[1] = (fy * vid.mode.height - hy) * vid_conheight.integer / (float)hh;
+	out_con[2] = v[0];
+	return true;
+}
+
 void VRH_GetUnionFovTangents(float *tanx, float *tany)
 {
 	float mx = 0, my = 0;

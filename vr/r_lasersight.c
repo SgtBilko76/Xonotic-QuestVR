@@ -8,7 +8,7 @@
 #include "cl_collision.h"
 #include "vr/vr_api.h"
 
-cvar_t r_lasersight = {CF_CLIENT | CF_ARCHIVE, "r_lasersight", "2", "VR laser sight: 0 off, 1 beam, 2 aim dot, 3 both"};
+cvar_t r_lasersight = {CF_CLIENT | CF_ARCHIVE, "r_lasersight", "0", "VR laser sight: 0 off (the game crosshair marks the aim), 1 beam, 2 aim dot, 3 both"};
 cvar_t r_lasersight_thickness = {CF_CLIENT | CF_ARCHIVE, "r_lasersight_thickness", "0.4", "thickness of the laser sight beam"};
 cvar_t r_lasersight_color_red = {CF_CLIENT | CF_ARCHIVE, "r_lasersight_color_red", "0.8", "laser sight red"};
 cvar_t r_lasersight_color_green = {CF_CLIENT | CF_ARCHIVE, "r_lasersight_color_green", "0.1", "laser sight green"};
