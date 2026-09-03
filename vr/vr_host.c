@@ -341,8 +341,9 @@ bool VRH_FrameSetup(void)
 
 	VRH_UpdatePoses();
 
-	// flat screen for anything that is not the 3D game view
-	vrh_screenmode = cls.state != ca_connected || cls.signon != SIGNONS || key_dest == key_menu || scr_loading || (key_consoleactive & KEY_CONSOLEACTIVE_USER) != 0;
+	// flat screen for anything that is not the 3D game view; CSQC asking for a mouse cursor
+	// (map vote, HUD editor, quick menu) counts too, so the laser pointer can drive it
+	vrh_screenmode = cls.state != ca_connected || cls.signon != SIGNONS || key_dest == key_menu || scr_loading || (key_consoleactive & KEY_CONSOLEACTIVE_USER) != 0 || cl.csqc_wantsmousemove;
 	VR_SetConfig(VR_CONFIG_MODE, vrh_screenmode ? VR_MODE_MONO_SCREEN : VR_MODE_STEREO_6DOF);
 	VR_SetConfigFloat(VR_CONFIG_CANVAS_DISTANCE, vr_screen_distance.value);
 
