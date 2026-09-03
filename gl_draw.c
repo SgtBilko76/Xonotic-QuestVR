@@ -797,7 +797,11 @@ void DrawQ_Start(void)
 		// comfortable depth instead of at infinity
 		if (VRH_GetHudRect(&x, &y, &w, &h))
 		{
-			R_ResetViewRendering2D_Common(0, NULL, NULL, x, y, w, h, vid_conwidth.integer, vid_conheight.integer);
+			// 0..conwidth still maps onto the canvas, but the viewport covers the whole eye
+			// so projected overlays (crosshair, waypoints) can be drawn outside it
+			float sx = vid_conwidth.integer / (float)w, sy = vid_conheight.integer / (float)h;
+			R_ResetViewRendering2D_Ortho(0, NULL, NULL, 0, 0, vid.mode.width, vid.mode.height,
+				-x * sx, -y * sy, (vid.mode.width - x) * sx, (vid.mode.height - y) * sy);
 			return;
 		}
 	}
@@ -1443,6 +1447,22 @@ void DrawQ_SetClipArea(float x, float y, float width, float height)
 	int ix, iy, iw, ih;
 	DrawQ_FlushUI();
 
+#ifdef VR_QUEST
+	{
+		int hx, hy, hw, hh;
+		// VR: con coords live on the shrunken, per-eye shifted HUD canvas
+		if (VRH_GetHudRect(&hx, &hy, &hw, &hh))
+		{
+			ix = (int)(0.5 + x * ((float)hw / vid_conwidth.integer)) + hx;
+			iy = (int)(0.5 + y * ((float)hh / vid_conheight.integer)) + hy;
+			iw = (int)(0.5 + width * ((float)hw / vid_conwidth.integer));
+			ih = (int)(0.5 + height * ((float)hh / vid_conheight.integer));
+			GL_Scissor(ix, vid.mode.height - iy - ih, iw, ih);
+			GL_ScissorTest(true);
+			return;
+		}
+	}
+#endif
 	// We have to convert the con coords into real coords
 	// OGL uses bottom to top (origin is in bottom left)
 	ix = (int)(0.5 + x * ((float)r_refdef.view.width / vid_conwidth.integer)) + r_refdef.view.x;
