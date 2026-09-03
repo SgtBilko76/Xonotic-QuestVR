@@ -55,8 +55,9 @@ void VR_GetResolution(engine_t* engine, int *pWidth, int *pHeight) {
 
 		width = engine->appState.ViewConfigurationView[0].recommendedImageRectWidth;
 		height = engine->appState.ViewConfigurationView[0].recommendedImageRectHeight;
-		// the runtime's recommendation fluctuates between boots (1680x1760 vs 2800x2933 on Quest 3);
-		// clamp to the panel-native baseline so resolution is deterministic and supersampling means one thing
+		// the runtime hands out whatever debug.oculus.textureWidth/Height says (Quest Games Optimizer
+		// sets e.g. 2800x2933 on Quest 3; bare default is 1680x1760). Clamp to the panel-native baseline
+		// so resolution stays under vr_supersampling's control and means the same thing with or without QGO
 		if (width > 1680) {
 			height = (int)((long long)height * 1680 / width);
 			width = 1680;
