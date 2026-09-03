@@ -1,0 +1,1 @@
+-xonotic -basedir /sdcard/XonoticVR -nohome +exec vr.cfg
