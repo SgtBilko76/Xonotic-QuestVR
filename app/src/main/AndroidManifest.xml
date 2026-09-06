@@ -32,6 +32,7 @@
         android:extractNativeLibs="true"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <profileable android:shell="true" />
 
         <!-- META QUEST -->
         <meta-data android:name="com.samsung.android.vr.application.mode" android:value="vr_only"/>
