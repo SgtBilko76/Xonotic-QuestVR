@@ -5689,7 +5689,13 @@ void R_UpdateVariables(void)
 	{
 	case RENDERPATH_GL32:
 		r_gpuskeletal = r_glsl_skeletal.integer && !r_showsurfaces.integer;
+		// fallthrough
 	case RENDERPATH_GLES2:
+		// GPU skeletal skinning uses a uniform block, which is core in the GLES 3.00 shaders the
+		// in-game (multiview) path compiles; without this animated models are CPU-skinned and
+		// re-uploaded every frame - the biggest per-frame cost on the Quest. r_glsl_skeletal 0 falls back.
+		if (vid.renderpath == RENDERPATH_GLES2)
+			r_gpuskeletal = r_glsl_skeletal.integer && !r_showsurfaces.integer;
 		if(!vid_gammatables_trivial)
 		{
 			if(!r_texture_gammaramps || vid_gammatables_serial != r_texture_gammaramps_serial)

@@ -302,10 +302,35 @@ static const unsigned short skyboxelement3s[6*2*3] =
 	20, 22, 23
 };
 
+// the skybox geometry never changes: keep it in static buffers so the six faces draw straight
+// from them instead of copying and uploading their vertices every frame (freed in r_sky_shutdown)
+static r_meshbuffer_t *skybox_vertexbuffer, *skybox_texcoordbuffer, *skybox_indexbuffer;
+
+static void R_SkyBox_FreeBuffers(void)
+{
+	if (skybox_vertexbuffer)
+		R_Mesh_DestroyMeshBuffer(skybox_vertexbuffer);
+	if (skybox_texcoordbuffer)
+		R_Mesh_DestroyMeshBuffer(skybox_texcoordbuffer);
+	if (skybox_indexbuffer)
+		R_Mesh_DestroyMeshBuffer(skybox_indexbuffer);
+	skybox_vertexbuffer = skybox_texcoordbuffer = skybox_indexbuffer = NULL;
+}
+
 static void R_SkyBox(void)
 {
 	int i;
 	RSurf_ActiveCustomEntity(&skymatrix, &skyinversematrix, 0, 0, 1, 1, 1, 1, 6*4, skyboxvertex3f, skyboxtexcoord2f, NULL, NULL, NULL, NULL, 6*2, skyboxelement3i, skyboxelement3s, false, false);
+	if (!skybox_vertexbuffer)
+	{
+		skybox_vertexbuffer = R_Mesh_CreateMeshBuffer(skyboxvertex3f, sizeof(skyboxvertex3f), "skybox_vertex3f", false, false, false, false);
+		skybox_texcoordbuffer = R_Mesh_CreateMeshBuffer(skyboxtexcoord2f, sizeof(skyboxtexcoord2f), "skybox_texcoord2f", false, false, false, false);
+		skybox_indexbuffer = R_Mesh_CreateMeshBuffer(skyboxelement3s, sizeof(skyboxelement3s), "skybox_element3s", true, false, false, true);
+	}
+	rsurface.modelvertex3f_vertexbuffer = skybox_vertexbuffer;
+	rsurface.modeltexcoordtexture2f_vertexbuffer = skybox_texcoordbuffer;
+	rsurface.modelelement3s_indexbuffer = skybox_indexbuffer;
+	rsurface.modelgeneratedvertex = false;
 	for (i = 0;i < 6;i++)
 		if(skyboxskinframe[i])
 			R_DrawCustomSurface(skyboxskinframe[i], &identitymatrix, MATERIALFLAG_SKY | MATERIALFLAG_FULLBRIGHT | MATERIALFLAG_NOCULLFACE | MATERIALFLAG_NODEPTHTEST, i*4, 4, i*2, 2, false, false, false);
@@ -452,6 +477,7 @@ static void r_sky_start(void)
 
 static void r_sky_shutdown(void)
 {
+	R_SkyBox_FreeBuffers();
 	R_UnloadSkyBox();
 	R_FreeTexturePool(&skytexturepool);
 }
