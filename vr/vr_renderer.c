@@ -247,7 +247,7 @@ void VR_InitRenderer( engine_t* engine, bool multiview ) {
 				memset(&foveationState, 0, sizeof(foveationState));
 				foveationState.type = XR_TYPE_SWAPCHAIN_STATE_FOVEATION_FB;
 				foveationState.profile = profile;
-				for (eye = 0; eye < ovrMaxNumEyes; eye++)
+				for (eye = 0; eye < (engine->appState.Renderer.Multiview ? 1 : ovrMaxNumEyes); eye++)
 					OXR(pfnUpdateSwapchain(engine->appState.Renderer.FrameBuffer[eye].ColorSwapChain.Handle, (const XrSwapchainStateBaseHeaderFB*)&foveationState));
 				if (pfnDestroyFoveationProfile)
 					OXR(pfnDestroyFoveationProfile(profile));
@@ -256,8 +256,8 @@ void VR_InitRenderer( engine_t* engine, bool multiview ) {
 		}
 	}
 	initialized = true;
-	ALOGV("Renderer initialised: eye buffers %ix%i, msaa %i, screen rect %ix%i", eyeW, eyeH, msaa,
-			VR_GetConfig(VR_CONFIG_SCREEN_WIDTH), VR_GetConfig(VR_CONFIG_SCREEN_HEIGHT));
+	ALOGV("Renderer initialised: eye buffers %ix%i, msaa %i, screen rect %ix%i, multiview %i", eyeW, eyeH, msaa,
+			VR_GetConfig(VR_CONFIG_SCREEN_WIDTH), VR_GetConfig(VR_CONFIG_SCREEN_HEIGHT), multiview ? 1 : 0);
 }
 
 void VR_DestroyRenderer( engine_t* engine ) {
@@ -325,6 +325,8 @@ bool VR_InitFrame( engine_t* engine ) {
 }
 
 void VR_BeginFrame( engine_t* engine, int fboIndex ) {
+	if (engine->appState.Renderer.Multiview)
+		fboIndex = 0;   /* one 2-layer buffer serves both eyes */
 	if (fboIndex == 0) {
 		XrFrameBeginInfo beginFrameDesc;
 		memset(&beginFrameDesc, 0, sizeof(beginFrameDesc));
@@ -338,6 +340,8 @@ void VR_BeginFrame( engine_t* engine, int fboIndex ) {
 }
 
 void VR_EndFrame( engine_t* engine, int fboIndex ) {
+	if (engine->appState.Renderer.Multiview)
+		fboIndex = 0;
 	VR_BindFramebuffer(engine, fboIndex);
 
 	// Show mouse cursor
@@ -369,7 +373,8 @@ void VR_FinishFrame( engine_t* engine ) {
 		menuYawValid = false;
 
 		for (int eye = 0; eye < ovrMaxNumEyes; eye++) {
-			ovrFramebuffer* frameBuffer = &engine->appState.Renderer.FrameBuffer[eye];
+			// multiview: both eyes live in the layers of frame buffer 0
+			ovrFramebuffer* frameBuffer = &engine->appState.Renderer.FrameBuffer[engine->appState.Renderer.Multiview ? 0 : eye];
 			projection_layer_elements[eye].type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW;
 			projection_layer_elements[eye].pose = projections[eye].pose;
 			projection_layer_elements[eye].fov = projections[eye].fov;
@@ -378,7 +383,7 @@ void VR_FinishFrame( engine_t* engine ) {
 			projection_layer_elements[eye].subImage.imageRect.offset.y = 0;
 			projection_layer_elements[eye].subImage.imageRect.extent.width = vrWidth;
 			projection_layer_elements[eye].subImage.imageRect.extent.height = vrHeight;
-			projection_layer_elements[eye].subImage.imageArrayIndex = 0;
+			projection_layer_elements[eye].subImage.imageArrayIndex = engine->appState.Renderer.Multiview ? eye : 0;
 		}
 
 		XrCompositionLayerProjection projection_layer;
@@ -482,11 +487,13 @@ void VR_SetConfigFloat(enum VRConfigFloat config, float value) {
 
 void VR_BindFramebuffer(engine_t *engine, int fboIndex) {
 	if (!initialized) return;
+	if (engine->appState.Renderer.Multiview) fboIndex = 0;
 	ovrFramebuffer_SetCurrent(&engine->appState.Renderer.FrameBuffer[fboIndex]);
 }
 
 unsigned int VR_GetEyeFBO(engine_t *engine, int fboIndex) {
 	if (!initialized) return 0;
+	if (engine->appState.Renderer.Multiview) fboIndex = 0;
 	return ovrFramebuffer_GetCurrentFBO(&engine->appState.Renderer.FrameBuffer[fboIndex]);
 }
 

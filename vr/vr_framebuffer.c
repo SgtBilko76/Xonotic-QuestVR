@@ -411,7 +411,7 @@ void ovrRenderer_Create(
 	// Create the frame buffers.
 	renderer->Multiview = useMultiview;
 	int count = renderer->Multiview ? 1 : ovrMaxNumEyes;
-	for (int eye = 0; eye < ovrMaxNumEyes; eye++) {
+	for (int eye = 0; eye < count; eye++) {
 		ovrFramebuffer_Create(
 				session,
 				&renderer->FrameBuffer[eye],
@@ -424,7 +424,7 @@ void ovrRenderer_Create(
 
 void ovrRenderer_Destroy(ovrRenderer* renderer) {
 	int count = renderer->Multiview ? 1 : ovrMaxNumEyes;
-	for (int eye = 0; eye < ovrMaxNumEyes; eye++) {
+	for (int eye = 0; eye < count; eye++) {
 		ovrFramebuffer_Destroy(&renderer->FrameBuffer[eye]);
 	}
 }

@@ -2302,7 +2302,8 @@ void CL_UpdateScreen(void)
 		// VR: xrWaitFrame paces the engine; render each eye into its swapchain image
 		if (VRH_FrameSetup())
 		{
-			int eye, numeyes = VRH_ScreenMode() ? 1 : 2;
+			// multiview: one pass draws both layers of the eye buffer
+			int eye, numeyes = (VRH_ScreenMode() || VRH_Multiview()) ? 1 : 2;
 			for (eye = 0; eye < numeyes; eye++)
 			{
 				VRH_BeginEye(eye);

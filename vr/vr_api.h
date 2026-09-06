@@ -33,6 +33,10 @@ void  VRH_SubmitFrame(void);        /* xrEndFrame */
 void  VRH_GetEyeResolution(int *width, int *height);
 bool  VRH_GetHudRect(int *x, int *y, int *w, int *h);   /* 2D canvas rect for the current eye (false: full screen) */
 bool  VRH_ScreenMode(void);         /* true: menu/console/loading -> mono render on a flat layer */
+bool  VRH_Multiview(void);          /* eye buffers are one 2-layer array (GL_OVR_multiview2): every program must declare num_views=2 */
+bool  VRH_MultiviewStereo(void);    /* multiview and drawing the stereo world in a single pass (false in screen mode) */
+bool  VRH_GetHudRectEye(int eye, int *x, int *y, int *w, int *h);
+float VRH_Get2DDisparity(float x0, float y0, float x1, float y1); /* multiview: per-eye x shift (con units) for a 2D rect drawn near a projected point */
 
 /* ---- view / projection ---- */
 void  VRH_GetEyeOffset(int eye, float out_quake[3], float out_angles[3]); /* eye pose relative to the head: Quake units / Quake angles */
