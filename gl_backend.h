@@ -10,6 +10,13 @@ extern matrix4x4_t gl_projectionmatrix;
 extern matrix4x4_t gl_modelviewprojectionmatrix;
 extern float gl_modelview16f[16];
 extern float gl_modelviewprojection16f[16];
+#ifdef VR_QUEST
+extern matrix4x4_t gl_mv_viewmatrix[2];
+extern matrix4x4_t gl_mv_projectionmatrix[2];
+extern float gl_mv_modelview16f[2][16];
+extern float gl_mv_modelviewprojection16f[2][16];
+qbool GL_MultiviewActive(void); ///< VR: every program is a num_views=2 multiview program and per-view uniforms take 2 elements
+#endif
 extern qbool gl_modelmatrixchanged;
 
 #define POLYGONELEMENTS_MAXPOINTS 258

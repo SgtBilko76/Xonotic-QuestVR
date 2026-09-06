@@ -45,6 +45,7 @@ cvar_t vr_viewkick = {CF_CLIENT | CF_ARCHIVE, "vr_viewkick", "0", "scale of dama
 cvar_t vr_haptics = {CF_CLIENT | CF_ARCHIVE, "vr_haptics", "1", "controller vibration"};
 cvar_t vr_thumbstick_deadzone = {CF_CLIENT | CF_ARCHIVE, "vr_thumbstick_deadzone", "0.15", "thumbstick dead zone"};
 cvar_t vr_foveation = {CF_CLIENT | CF_ARCHIVE, "vr_foveation", "2", "fixed foveated rendering level: 0 off, 1 low, 2 medium, 3 high (applied at startup)"};
+cvar_t vr_multiview = {CF_CLIENT | CF_ARCHIVE, "vr_multiview", "1", "draw both eyes in one pass with GL_OVR_multiview2 (applied at startup)"};
 cvar_t vr_keyboard = {CF_CLIENT | CF_ARCHIVE, "vr_keyboard", "0", "enable the thumbstick grid keyboard (Y in menus/chat)"};
 cvar_t vr_menu_pointer_scale = {CF_CLIENT | CF_ARCHIVE, "vr_menu_pointer_scale", "1.0", "sensitivity of the laser pointer on the menu screen"};
 
@@ -56,6 +57,8 @@ static bool vrh_initialized = false;   /* VRH_Init ran */
 static bool vrh_session = false;       /* OpenXR session + renderer exist */
 static bool vrh_frame_active = false;  /* between a successful VRH_FrameSetup and VRH_SubmitFrame */
 static bool vrh_screenmode = true;
+static bool vrh_multiview = false;     /* eye buffers are a 2-layer array, shaders declare num_views=2 */
+static int vrh_numprojected;           /* projected-point list for multiview 2D disparity (see VRH_ProjectPoint) */
 
 static float vrh_yawoffset = 0;        /* accumulated artificial (snap/smooth) yaw, degrees */
 static float vrh_hmdangles[3];         /* Quake pitch/yaw/roll of the HMD (no yaw offset) */
@@ -181,6 +184,7 @@ void VRH_RegisterCvars(void)
 	Cvar_RegisterVariable(&vr_menu_pointer_scale);
 	Cvar_RegisterVariable(&vr_keyboard);
 	Cvar_RegisterVariable(&vr_foveation);
+	Cvar_RegisterVariable(&vr_multiview);
 	R_LaserSights_Init();
 }
 
@@ -221,13 +225,34 @@ void VRH_Init(void)
 	VR_SetConfigFloat(VR_CONFIG_VIEWPORT_SUPERSAMPLING, bound(0.5f, vr_supersampling.value, 2.0f));
 	VR_SetConfigFloat(VR_CONFIG_CANVAS_DISTANCE, vr_screen_distance.value);
 	VR_SetConfig(VR_CONFIG_FOVEATION_LEVEL, bound(0, vr_foveation.integer, 3));
-	VR_InitRenderer(engine, false);
+	{
+		// multiview: one draw call fills both layers of a 2-layer eye buffer, so the whole client
+		// frame (CSQC, culling, buffer uploads, draw submission) runs once instead of per eye
+		const char *ext = (const char *)glGetString(GL_EXTENSIONS);
+		int msaa = bound(1, vr_msaa.integer, 4);
+		vrh_multiview = vr_multiview.integer && ext && strstr(ext, "GL_OVR_multiview2") && (msaa <= 1 || strstr(ext, "GL_OVR_multiview_multisampled_render_to_texture"));
+		VRH_Log("multiview rendering %s", vrh_multiview ? "enabled" : (vr_multiview.integer ? "unavailable" : "disabled by vr_multiview"));
+	}
+	VR_InitRenderer(engine, vrh_multiview);
 	if (vr_refreshrate.integer > 0)
 		VR_SetRefreshRate(vr_refreshrate.integer);
 
 	vrh_session = true;
 	vrh_needcalibrate = true;
 	VRH_Log("OpenXR session created, refresh %i Hz", VR_GetRefreshRate());
+	// programs compiled before this point are single-view and cannot draw into the multiview eye buffer
+	if (vrh_multiview)
+		R_GLSL_Restart_f(cmd_local);
+}
+
+bool VRH_Multiview(void)
+{
+	return vrh_session && vrh_multiview;
+}
+
+bool VRH_MultiviewStereo(void)
+{
+	return vrh_session && vrh_multiview && !vrh_screenmode;
 }
 
 void VRH_Shutdown(void)
@@ -340,6 +365,7 @@ bool VRH_FrameSetup(void)
 		vrh_needcalibrate = true;
 
 	VRH_UpdatePoses();
+	vrh_numprojected = 0;
 
 	// flat screen for anything that is not the 3D game view; CSQC asking for a mouse cursor
 	// (map vote, HUD editor, quick menu) counts too, so the laser pointer can drive it
@@ -366,27 +392,33 @@ void VRH_GetEyeResolution(int *width, int *height)
 	}
 }
 
-bool VRH_GetHudRect(int *x, int *y, int *w, int *h)
+bool VRH_GetHudRectEye(int eye, int *x, int *y, int *w, int *h)
 {
 	float scale, shift, tl, tr, tu, td, cxfrac, cyfrac_top;
 	XrFovf fov;
 	if (!vrh_session || vrh_screenmode)
 		return false;
+	eye = bound(0, eye, 1);
 	scale = bound(0.2f, vr_hudscale.value, 1.0f);
 	shift = bound(-0.1f, vr_hudstereo.value, 0.1f) * vid.mode.width;
 	*w = (int)(vid.mode.width * scale);
 	*h = (int)(vid.mode.height * scale);
 	// Each eye's fov is asymmetric, so the same pixel points in different directions per eye.
 	// Centre the canvas on this eye's straight-ahead direction so the HUD fuses between the eyes.
-	fov = VR_GetFov(bound(0, r_stereo_side, 1));
+	fov = VR_GetFov(eye);
 	tl = tanf(fov.angleLeft); tr = tanf(fov.angleRight);
 	td = tanf(fov.angleDown); tu = tanf(fov.angleUp);
 	cxfrac = (0.0f - tl) / (tr - tl);          /* fraction from the left edge */
 	cyfrac_top = tu / (tu - td);               /* fraction from the top edge */
 	// converge slightly on top: left eye's canvas shifted right, right eye's shifted left
-	*x = (int)(cxfrac * vid.mode.width) - *w / 2 + (int)(r_stereo_side == 0 ? shift : -shift);
+	*x = (int)(cxfrac * vid.mode.width) - *w / 2 + (int)(eye == 0 ? shift : -shift);
 	*y = (int)(cyfrac_top * vid.mode.height) - *h / 2;
 	return true;
+}
+
+bool VRH_GetHudRect(int *x, int *y, int *w, int *h)
+{
+	return VRH_GetHudRectEye(r_stereo_side, x, y, w, h);
 }
 
 void VRH_BeginEye(int eye)
@@ -468,16 +500,14 @@ void VRH_GetProjection(int eye, float znear, float zfar, float m16[16])
 /* project a world point the way the current eye renders it and return 2D con coordinates
  * of the HUD canvas (what CSQC's cs_project / project_3d_to_2d expects), so things Xonotic
  * places by projection - the crosshair, waypoint sprites - land on the right pixel per eye */
-bool VRH_ProjectPoint(const float world[3], float out_con[3])
+static bool VRH_ProjectPointEye(int eye, const float world[3], float out_con[3])
 {
 	matrix4x4_t offset, eyematrix, inv;
 	vec3_t eyeoff, eyeang, v;
 	XrFovf fov;
 	float l, r, d, u, fx, fy, fwd;
-	int eye = bound(0, r_stereo_side, 1);
 	int hx, hy, hw, hh;
-	if (!vrh_session || vrh_screenmode)
-		return false;
+	eye = bound(0, eye, 1);
 	// r_refdef.view.matrix is the head pose (R_RenderView restores it after drawing the eye)
 	VRH_GetEyeOffset(eye, eyeoff, eyeang);
 	Matrix4x4_CreateFromQuakeEntity(&offset, eyeoff[0], eyeoff[1], eyeoff[2], eyeang[0], eyeang[1], eyeang[2], 1);
@@ -496,7 +526,7 @@ bool VRH_ProjectPoint(const float world[3], float out_con[3])
 	fx = (-v[1] / fwd - l) / (r - l);
 	fy = (u - v[2] / fwd) / (u - d);
 	// eye pixel -> con coordinates of the (smaller, shifted) HUD canvas of this eye
-	if (!VRH_GetHudRect(&hx, &hy, &hw, &hh))
+	if (!VRH_GetHudRectEye(eye, &hx, &hy, &hw, &hh))
 	{
 		hx = hy = 0;
 		hw = vid.mode.width;
@@ -506,6 +536,57 @@ bool VRH_ProjectPoint(const float world[3], float out_con[3])
 	out_con[1] = (fy * vid.mode.height - hy) * vid_conheight.integer / (float)hh;
 	out_con[2] = v[0];
 	return true;
+}
+
+/* multiview: CSQC runs once for both eyes, so a projected point is handed back at the mid point
+ * between the eyes' results and the per-eye half difference is remembered; the 2D vertices
+ * drawn around that point carry it as their z, which the per-view ortho matrices turn into an
+ * opposite horizontal shift per eye - the overlay then fuses at the point's world depth
+ * (this keeps the crosshair sitting on the aimed surface, as with the per-eye passes) */
+#define VRH_MAXPROJECTED 64
+static float vrh_projected[VRH_MAXPROJECTED][3];   /* con x, con y, half disparity */
+
+bool VRH_ProjectPoint(const float world[3], float out_con[3])
+{
+	float l[3], r[3];
+	if (!vrh_session || vrh_screenmode)
+		return false;
+	if (!vrh_multiview)
+		return VRH_ProjectPointEye(r_stereo_side, world, out_con);
+	VRH_ProjectPointEye(0, world, l);
+	VRH_ProjectPointEye(1, world, r);
+	out_con[0] = (l[0] + r[0]) * 0.5f;
+	out_con[1] = (l[1] + r[1]) * 0.5f;
+	out_con[2] = l[2];
+	if (l[2] > 0 && vrh_numprojected < VRH_MAXPROJECTED)
+	{
+		float *p = vrh_projected[vrh_numprojected++];
+		p[0] = out_con[0];
+		p[1] = out_con[1];
+		p[2] = (l[0] - r[0]) * 0.5f;
+	}
+	return true;
+}
+
+float VRH_Get2DDisparity(float x0, float y0, float x1, float y1)
+{
+	const float margin = 24.0f;
+	float best = 0, bestdist = 0;
+	int i;
+	for (i = 0; i < vrh_numprojected; i++)
+	{
+		const float *p = vrh_projected[i];
+		float dist;
+		if (p[0] < x0 - margin || p[0] > x1 + margin || p[1] < y0 - margin || p[1] > y1 + margin)
+			continue;
+		dist = fabsf(p[0] - (x0 + x1) * 0.5f) + fabsf(p[1] - (y0 + y1) * 0.5f);
+		if (best == 0 || dist < bestdist)
+		{
+			best = p[2];
+			bestdist = dist;
+		}
+	}
+	return best;
 }
 
 void VRH_GetUnionFovTangents(float *tanx, float *tany)

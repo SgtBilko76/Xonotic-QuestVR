@@ -26,6 +26,17 @@ matrix4x4_t gl_modelmatrix;
 matrix4x4_t gl_viewmatrix;
 matrix4x4_t gl_modelviewmatrix;
 matrix4x4_t gl_projectionmatrix;
+#ifdef VR_QUEST
+matrix4x4_t gl_mv_viewmatrix[2];
+matrix4x4_t gl_mv_projectionmatrix[2];
+float gl_mv_modelview16f[2][16];
+float gl_mv_modelviewprojection16f[2][16];
+
+qbool GL_MultiviewActive(void)
+{
+	return VRH_Available() && VRH_Multiview();
+}
+#endif
 matrix4x4_t gl_modelviewprojectionmatrix;
 float gl_modelview16f[16];
 float gl_modelviewprojection16f[16];
@@ -687,6 +698,33 @@ void R_Viewport_InitOrtho3D(r_viewport_t *v, const matrix4x4_t *cameramatrix, in
 	Matrix4x4_FromArrayFloatGL(&v->projectmatrix, m);
 }
 
+#ifdef VR_QUEST
+// VR multiview: one render pass for both eyes. The primary matrices keep the head pose (culling,
+// sorting, sky, CSQC), while each view gets its own eye-offset view matrix and asymmetric projection,
+// selected in the vertex shader through gl_ViewID_OVR.
+static void R_Viewport_VRMultiviewPerspective(r_viewport_t *v, const matrix4x4_t *cameramatrix, const float base_m[16], float nearclip, float farclip)
+{
+	int eye;
+	for (eye = 0; eye < 2; eye++)
+	{
+		matrix4x4_t offset, eyecamera, inv, basematrix;
+		float m[16];
+		vec3_t eyeoff, eyeang;
+		VRH_GetEyeOffset(eye, eyeoff, eyeang);
+		Matrix4x4_CreateFromQuakeEntity(&offset, eyeoff[0], eyeoff[1], eyeoff[2], eyeang[0], eyeang[1], eyeang[2], 1);
+		Matrix4x4_Concat(&eyecamera, cameramatrix, &offset);
+		Matrix4x4_Invert_Full(&inv, &eyecamera);
+		Matrix4x4_CreateRotate(&basematrix, -90, 1, 0, 0);
+		Matrix4x4_ConcatRotate(&basematrix, 90, 0, 0, 1);
+		Matrix4x4_Concat(&v->mv_viewmatrix[eye], &basematrix, &inv);
+		memcpy(m, base_m, sizeof(m));
+		VRH_GetProjection(eye, nearclip, farclip, m);
+		Matrix4x4_FromArrayFloatGL(&v->mv_projectmatrix[eye], m);
+	}
+	v->multiview = 1;
+}
+#endif
+
 void R_Viewport_InitPerspective(r_viewport_t *v, const matrix4x4_t *cameramatrix, int x, int y, int width, int height, float frustumx, float frustumy, float nearclip, float farclip, const float *nearplane)
 {
 	matrix4x4_t tempmatrix, basematrix;
@@ -711,7 +749,12 @@ void R_Viewport_InitPerspective(r_viewport_t *v, const matrix4x4_t *cameramatrix
 	v->screentodepth[1] = farclip * nearclip / (farclip - nearclip);
 #ifdef VR_QUEST
 	if (VRH_Available() && !VRH_ScreenMode())
-		VRH_GetProjection(r_stereo_side, nearclip, farclip, m); // per-eye asymmetric fov
+	{
+		if (VRH_MultiviewStereo())
+			R_Viewport_VRMultiviewPerspective(v, cameramatrix, m, nearclip, farclip);
+		else
+			VRH_GetProjection(r_stereo_side, nearclip, farclip, m); // per-eye asymmetric fov
+	}
 #endif
 
 	Matrix4x4_Invert_Full(&tempmatrix, &v->cameramatrix);
@@ -758,7 +801,12 @@ void R_Viewport_InitPerspectiveInfinite(r_viewport_t *v, const matrix4x4_t *came
 	v->screentodepth[1] = m[14] * -0.5;
 #ifdef VR_QUEST
 	if (VRH_Available() && !VRH_ScreenMode())
-		VRH_GetProjection(r_stereo_side, nearclip, 0, m); // per-eye asymmetric fov
+	{
+		if (VRH_MultiviewStereo())
+			R_Viewport_VRMultiviewPerspective(v, cameramatrix, m, nearclip, 0);
+		else
+			VRH_GetProjection(r_stereo_side, nearclip, 0, m); // per-eye asymmetric fov
+	}
 #endif
 
 	Matrix4x4_Invert_Full(&tempmatrix, &v->cameramatrix);
@@ -925,6 +973,21 @@ void R_SetViewport(const r_viewport_t *v)
 	// copy over the matrices to our state
 	gl_viewmatrix = v->viewmatrix;
 	gl_projectionmatrix = v->projectmatrix;
+#ifdef VR_QUEST
+	if (v->multiview)
+	{
+		gl_mv_viewmatrix[0] = v->mv_viewmatrix[0];
+		gl_mv_viewmatrix[1] = v->mv_viewmatrix[1];
+		gl_mv_projectionmatrix[0] = v->mv_projectmatrix[0];
+		gl_mv_projectionmatrix[1] = v->mv_projectmatrix[1];
+	}
+	else
+	{
+		// both views draw the same image (flat screen mode, 2D outside the HUD canvas)
+		gl_mv_viewmatrix[0] = gl_mv_viewmatrix[1] = v->viewmatrix;
+		gl_mv_projectionmatrix[0] = gl_mv_projectionmatrix[1] = v->projectmatrix;
+	}
+#endif
 
 	switch(vid.renderpath)
 	{

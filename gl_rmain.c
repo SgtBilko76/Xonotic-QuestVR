@@ -761,6 +761,9 @@ typedef struct r_glsl_permutation_s
 	int loc_Alpha;
 	int loc_BloomBlur_Parameters;
 	int loc_ClientTime;
+#ifdef VR_QUEST
+	int loc_ClipRect;
+#endif
 	int loc_Color_Ambient;
 	int loc_Color_Diffuse;
 	int loc_Color_Specular;
@@ -1033,9 +1036,9 @@ static void R_GLSL_CompilePermutation(r_glsl_permutation_t *p, unsigned int mode
 	int vertstrings_count = 0;
 	int geomstrings_count = 0;
 	int fragstrings_count = 0;
-	const char *vertstrings_list[32+5+SHADERSTATICPARMS_COUNT+1];
-	const char *geomstrings_list[32+5+SHADERSTATICPARMS_COUNT+1];
-	const char *fragstrings_list[32+5+SHADERSTATICPARMS_COUNT+1];
+	const char *vertstrings_list[32+5+SHADERSTATICPARMS_COUNT+3];
+	const char *geomstrings_list[32+5+SHADERSTATICPARMS_COUNT+3];
+	const char *fragstrings_list[32+5+SHADERSTATICPARMS_COUNT+3];
 
 	if (p->compiled)
 		return;
@@ -1077,6 +1080,17 @@ static void R_GLSL_CompilePermutation(r_glsl_permutation_t *p, unsigned int mode
 		geomstrings_list[geomstrings_count++] = "#define GLSL120\n";
 		fragstrings_list[fragstrings_count++] = "#define GLSL120\n";
 	}
+#ifdef VR_QUEST
+	// VR multiview: every program draws both views of the 2-layer eye buffer in one pass.
+	// GL_OVR_multiview2 needs GLSL ES 3.00, which the GLSL130 path provides (in/out, texture()).
+	// The fragment shader gets a wrapper main() that applies the per-view 2D clip rect.
+	if (GL_MultiviewActive())
+	{
+		vertstrings_list[vertstrings_count++] = "#version 300 es\n#extension GL_OVR_multiview2 : require\n#define GLSL130\n#define USEMULTIVIEW\n";
+		geomstrings_list[geomstrings_count++] = "\n";
+		fragstrings_list[fragstrings_count++] = "#version 300 es\n#extension GL_OVR_multiview2 : require\n#define GLSL130\n#define USEMULTIVIEW\n#define main dp_main\n";
+	}
+#endif
 	// GLES also adds several things from GLSL120
 	switch(vid.renderpath)
 	{
@@ -1133,6 +1147,22 @@ static void R_GLSL_CompilePermutation(r_glsl_permutation_t *p, unsigned int mode
 	vertstrings_list[vertstrings_count++] = sourcestring;
 	geomstrings_list[geomstrings_count++] = sourcestring;
 	fragstrings_list[fragstrings_count++] = sourcestring;
+#ifdef VR_QUEST
+	if (GL_MultiviewActive())
+		fragstrings_list[fragstrings_count++] =
+			"\n#undef main\n"
+			"uniform highp vec4 ClipRect[2];\n"
+			"void main(void)\n"
+			"{\n"
+			"	if (ClipRect[0].z > 0.0)\n"
+			"	{\n"
+			"		highp vec4 cr = ClipRect[gl_ViewID_OVR];\n"
+			"		if (gl_FragCoord.x < cr.x || gl_FragCoord.y < cr.y || gl_FragCoord.x > cr.z || gl_FragCoord.y > cr.w)\n"
+			"			discard;\n"
+			"	}\n"
+			"	dp_main();\n"
+			"}\n";
+#endif
 
 	// we don't currently use geometry shaders for anything, so just empty the list
 	geomstrings_count = 0;
@@ -1200,6 +1230,9 @@ static void R_GLSL_CompilePermutation(r_glsl_permutation_t *p, unsigned int mode
 		p->loc_Alpha                      = qglGetUniformLocation(p->program, "Alpha");
 		p->loc_BloomBlur_Parameters       = qglGetUniformLocation(p->program, "BloomBlur_Parameters");
 		p->loc_ClientTime                 = qglGetUniformLocation(p->program, "ClientTime");
+#ifdef VR_QUEST
+		p->loc_ClipRect                   = qglGetUniformLocation(p->program, "ClipRect");
+#endif
 		p->loc_Color_Ambient              = qglGetUniformLocation(p->program, "Color_Ambient");
 		p->loc_Color_Diffuse              = qglGetUniformLocation(p->program, "Color_Diffuse");
 		p->loc_Color_Specular             = qglGetUniformLocation(p->program, "Color_Specular");
@@ -1344,6 +1377,38 @@ static void R_GLSL_CompilePermutation(r_glsl_permutation_t *p, unsigned int mode
 		Mem_Free(sourcestring);
 }
 
+#ifdef VR_QUEST
+// multiview 2D clipping state (see DrawQ_SetClipArea): per-view pixel rects, all zero = off
+static float r_vr_cliprect[2][4];
+static qbool r_vr_clipenabled = false;
+
+static void R_VR_UploadClipRect(void)
+{
+	if (r_glsl_permutation && r_glsl_permutation->loc_ClipRect >= 0)
+	{
+		static const float off[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+		qglUniform4fv(r_glsl_permutation->loc_ClipRect, 2, r_vr_clipenabled ? &r_vr_cliprect[0][0] : off);CHECKGLERROR
+	}
+}
+
+void R_VR_SetClipRect(qbool enabled, const float rect[2][4])
+{
+	if (!GL_MultiviewActive())
+		return;
+	r_vr_clipenabled = enabled;
+	if (enabled)
+		memcpy(r_vr_cliprect, rect, sizeof(r_vr_cliprect));
+	R_VR_UploadClipRect();
+}
+
+// per-view model-view(-projection) matrices for the currently bound program
+static void R_VR_UploadMatrices(void)
+{
+	if (r_glsl_permutation->loc_ModelViewProjectionMatrix >= 0) qglUniformMatrix4fv(r_glsl_permutation->loc_ModelViewProjectionMatrix, 2, false, &gl_mv_modelviewprojection16f[0][0]);
+	if (r_glsl_permutation->loc_ModelViewMatrix >= 0) qglUniformMatrix4fv(r_glsl_permutation->loc_ModelViewMatrix, 2, false, &gl_mv_modelview16f[0][0]);
+}
+#endif
+
 static void R_SetupShader_SetPermutationGLSL(unsigned int mode, uint64_t permutation)
 {
 	r_glsl_permutation_t *perm = R_GLSL_FindPermutation(mode, permutation);
@@ -1385,9 +1450,19 @@ static void R_SetupShader_SetPermutationGLSL(unsigned int mode, uint64_t permuta
 		}
 		CHECKGLERROR
 		qglUseProgram(r_glsl_permutation->program);CHECKGLERROR
+#ifdef VR_QUEST
+		R_VR_UploadClipRect();
+#endif
 	}
+#ifdef VR_QUEST
+	if (GL_MultiviewActive())
+		R_VR_UploadMatrices();
+	else
+#endif
+	{
 	if (r_glsl_permutation->loc_ModelViewProjectionMatrix >= 0) qglUniformMatrix4fv(r_glsl_permutation->loc_ModelViewProjectionMatrix, 1, false, gl_modelviewprojection16f);
 	if (r_glsl_permutation->loc_ModelViewMatrix >= 0) qglUniformMatrix4fv(r_glsl_permutation->loc_ModelViewMatrix, 1, false, gl_modelview16f);
+	}
 	if (r_glsl_permutation->loc_ClientTime >= 0) qglUniform1f(r_glsl_permutation->loc_ClientTime, cl.time);
 	CHECKGLERROR
 }
@@ -1995,6 +2070,13 @@ void R_SetupShader_Surface(const float rtlightambient[3], const float rtlightdif
 
 		if (r_glsl_permutation->loc_Color_Glow >= 0) qglUniform3f(r_glsl_permutation->loc_Color_Glow, t->render_glowmod[0], t->render_glowmod[1], t->render_glowmod[2]);
 		if (r_glsl_permutation->loc_Alpha >= 0) qglUniform1f(r_glsl_permutation->loc_Alpha, t->currentalpha * ((t->basematerialflags & MATERIALFLAG_WATERSHADER && r_fb.water.enabled && !r_refdef.view.isoverlay) ? t->r_water_wateralpha : 1));
+#ifdef VR_QUEST
+		if (GL_MultiviewActive())
+		{
+			if (r_glsl_permutation->loc_EyePosition >= 0) qglUniform3fv(r_glsl_permutation->loc_EyePosition, 2, &rsurface.mv_localvieworigin[0][0]);
+		}
+		else
+#endif
 		if (r_glsl_permutation->loc_EyePosition >= 0) qglUniform3f(r_glsl_permutation->loc_EyePosition, rsurface.localvieworigin[0], rsurface.localvieworigin[1], rsurface.localvieworigin[2]);
 		if (r_glsl_permutation->loc_Color_Pants >= 0)
 		{
@@ -4415,6 +4497,10 @@ void R_SetupView(qbool allowwaterclippingplane, int viewfbo, rtexture_t *viewdep
 	R_SetViewport(&r_refdef.view.viewport);
 }
 
+#ifdef VR_QUEST
+vec3_t r_vr_eyeorigin[2];
+#endif
+
 void R_EntityMatrix(const matrix4x4_t *matrix)
 {
 	if (gl_modelmatrixchanged || memcmp(matrix, &gl_modelmatrix, sizeof(matrix4x4_t)))
@@ -4426,6 +4512,23 @@ void R_EntityMatrix(const matrix4x4_t *matrix)
 		Matrix4x4_ToArrayFloatGL(&gl_modelviewmatrix, gl_modelview16f);
 		Matrix4x4_ToArrayFloatGL(&gl_modelviewprojectionmatrix, gl_modelviewprojection16f);
 		CHECKGLERROR
+#ifdef VR_QUEST
+		if (GL_MultiviewActive())
+		{
+			int eye;
+			for (eye = 0; eye < 2; eye++)
+			{
+				matrix4x4_t mv, mvp;
+				Matrix4x4_Concat(&mv, &gl_mv_viewmatrix[eye], &gl_modelmatrix);
+				Matrix4x4_Concat(&mvp, &gl_mv_projectionmatrix[eye], &mv);
+				Matrix4x4_ToArrayFloatGL(&mv, gl_mv_modelview16f[eye]);
+				Matrix4x4_ToArrayFloatGL(&mvp, gl_mv_modelviewprojection16f[eye]);
+			}
+			if (r_glsl_permutation)
+				R_VR_UploadMatrices();
+			return;
+		}
+#endif
 		switch(vid.renderpath)
 		{
 		case RENDERPATH_GL32:
@@ -4436,6 +4539,8 @@ void R_EntityMatrix(const matrix4x4_t *matrix)
 		}
 	}
 }
+
+static void R_ResetViewRendering2D_State(int viewfbo, const r_viewport_t *viewport);
 
 void R_ResetViewRendering2D_Ortho(int viewfbo, rtexture_t *viewdepthtexture, rtexture_t *viewcolortexture, int viewx, int viewy, int viewwidth, int viewheight, float x1, float y1, float x2, float y2)
 {
@@ -4449,9 +4554,60 @@ void R_ResetViewRendering2D_Ortho(int viewfbo, rtexture_t *viewdepthtexture, rte
 	viewy_adjusted = viewfbo ? viewy : vid.mode.height - viewheight - viewy;
 
 	R_Viewport_InitOrtho(&viewport, &identitymatrix, viewx, viewy_adjusted, viewwidth, viewheight, x1, y1, x2, y2, -10, 100, NULL);
+	R_ResetViewRendering2D_State(viewfbo, &viewport);
+}
+
+#ifdef VR_QUEST
+// VR multiview 2D pass: one draw fills both views. Each view's ortho matrix maps con coordinates onto
+// that eye's HUD canvas (DrawQ_Start's per-eye mapping), and a shear turns the vertex z - the per-eye
+// half disparity VRH_ProjectPoint attached to overlays drawn at a projected point - into an opposite
+// horizontal shift per eye, so those overlays fuse at their world depth like the old per-eye passes.
+void R_ResetViewRendering2D_VRMultiview(void)
+{
+	r_viewport_t viewport;
+	int eye;
+	CHECKGLERROR
+	for (eye = 0; eye < 2; eye++)
+	{
+		int hx, hy, hw, hh;
+		float sx, sy, left, right, top, bottom, zNear = -4096, zFar = 4096;
+		float m[16];
+		if (!VRH_GetHudRectEye(eye, &hx, &hy, &hw, &hh))
+		{
+			hx = hy = 0;
+			hw = vid.mode.width;
+			hh = vid.mode.height;
+		}
+		sx = vid_conwidth.integer / (float)hw;
+		sy = vid_conheight.integer / (float)hh;
+		left = -hx * sx;
+		right = (vid.mode.width - hx) * sx;
+		top = -hy * sy;
+		bottom = (vid.mode.height - hy) * sy;
+		if (eye == 0)
+			R_Viewport_InitOrtho(&viewport, &identitymatrix, 0, 0, vid.mode.width, vid.mode.height, left, top, right, bottom, zNear, zFar, NULL);
+		memset(m, 0, sizeof(m));
+		m[0]  = 2/(right - left);
+		m[5]  = 2/(top - bottom);
+		m[8]  = (eye == 0 ? 1.0f : -1.0f) * m[0];   // x += z for the left eye, x -= z for the right
+		m[10] = -2/(zFar - zNear);
+		m[12] = - (right + left)/(right - left);
+		m[13] = - (top + bottom)/(top - bottom);
+		m[14] = - (zFar + zNear)/(zFar - zNear);
+		m[15] = 1;
+		Matrix4x4_FromArrayFloatGL(&viewport.mv_projectmatrix[eye], m);
+		viewport.mv_viewmatrix[eye] = viewport.viewmatrix;
+	}
+	viewport.multiview = 1;
+	R_ResetViewRendering2D_State(0, &viewport);
+}
+#endif
+
+static void R_ResetViewRendering2D_State(int viewfbo, const r_viewport_t *viewport)
+{
 	R_Mesh_SetRenderTargets(viewfbo);
-	R_SetViewport(&viewport);
-	GL_Scissor(viewport.x, viewport.y, viewport.width, viewport.height);
+	R_SetViewport(viewport);
+	GL_Scissor(viewport->x, viewport->y, viewport->width, viewport->height);
 	GL_Color(1, 1, 1, 1);
 	GL_ColorMask(r_refdef.view.colormask[0], r_refdef.view.colormask[1], r_refdef.view.colormask[2], 1);
 	GL_BlendFunc(GL_ONE, GL_ZERO);
@@ -4487,6 +4643,9 @@ void R_ResetViewRendering2D(int viewfbo, rtexture_t *viewdepthtexture, rtexture_
 
 void R_ResetViewRendering3D(int viewfbo, rtexture_t *viewdepthtexture, rtexture_t *viewcolortexture, int viewx, int viewy, int viewwidth, int viewheight)
 {
+#ifdef VR_QUEST
+	R_VR_SetClipRect(false, NULL); // a 2D clip rect must never survive into the 3D pass
+#endif
 	R_SetupView(true, viewfbo, viewdepthtexture, viewcolortexture, viewx, viewy, viewwidth, viewheight);
 	GL_Scissor(r_refdef.view.viewport.x, r_refdef.view.viewport.y, r_refdef.view.viewport.width, r_refdef.view.viewport.height);
 	GL_Color(1, 1, 1, 1);
@@ -5673,10 +5832,27 @@ void R_RenderView(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture, i
 	{
 		vec3_t eyeoff, eyeang;
 		float tx, ty;
+		if (VRH_MultiviewStereo())
+		{
+			// both eyes in one pass: the view stays at the head; the eye offsets live in the per-view
+			// matrices (R_Viewport_InitPerspective) and in the per-view EyePosition uniform
+			int eye;
+			for (eye = 0; eye < 2; eye++)
+			{
+				matrix4x4_t eyematrix;
+				VRH_GetEyeOffset(eye, eyeoff, eyeang);
+				Matrix4x4_CreateFromQuakeEntity(&offsetmatrix, eyeoff[0], eyeoff[1], eyeoff[2], eyeang[0], eyeang[1], eyeang[2], 1);
+				Matrix4x4_Concat(&eyematrix, &originalmatrix, &offsetmatrix);
+				Matrix4x4_OriginFromMatrix(&eyematrix, r_vr_eyeorigin[eye]);
+			}
+		}
+		else
+		{
 		// per-eye pose relative to the head (view-local: position in Quake units, canted rotation)
 		VRH_GetEyeOffset(r_stereo_side, eyeoff, eyeang);
 		Matrix4x4_CreateFromQuakeEntity(&offsetmatrix, eyeoff[0], eyeoff[1], eyeoff[2], eyeang[0], eyeang[1], eyeang[2], 1);
 		Matrix4x4_Concat(&r_refdef.view.matrix, &originalmatrix, &offsetmatrix);
+		}
 		// Xonotic's CSQC zooms by narrowing the fov it requests via VF_FOV (cl.viewzoom stays 1):
 		// recover the zoom factor from the requested vertical tangent against the fov cvar's
 		// baseline (CSQC computes frustumy = tan(fov/2) * 0.75 * viewzoom)
@@ -5686,6 +5862,12 @@ void R_RenderView(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture, i
 		}
 		// cull with the union of both eyes' fov (the projection itself is asymmetric per eye)
 		VRH_GetUnionFovTangents(&tx, &ty);
+		if (VRH_MultiviewStereo())
+		{
+			// the single culling frustum sits at the head, slightly inside each eye: widen it a little
+			tx *= 1.05f;
+			ty *= 1.05f;
+		}
 		r_refdef.view.frustum_x = tx * VRH_GetZoom();
 		r_refdef.view.frustum_y = ty * VRH_GetZoom();
 	}
@@ -5696,6 +5878,13 @@ void R_RenderView(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture, i
 		Matrix4x4_CreateFromQuakeEntity(&offsetmatrix, 0, r_stereo_separation.value * (0.5f - r_stereo_side), 0, 0, r_stereo_angle.value * (0.5f - r_stereo_side), 0, 1);
 		Matrix4x4_Concat(&r_refdef.view.matrix, &originalmatrix, &offsetmatrix);
 	}
+#ifdef VR_QUEST
+	if (!(VRH_Available() && VRH_MultiviewStereo()))
+	{
+		Matrix4x4_OriginFromMatrix(&r_refdef.view.matrix, r_vr_eyeorigin[0]);
+		VectorCopy(r_vr_eyeorigin[0], r_vr_eyeorigin[1]);
+	}
+#endif
 
 	if (r_refdef.view.isoverlay)
 	{
@@ -6970,6 +7159,10 @@ void RSurf_ActiveModelEntity(const entity_render_t *ent, qbool wantnormals, qboo
 	rsurface.inversematrixscale = 1.0f / rsurface.matrixscale;
 	R_EntityMatrix(&rsurface.matrix);
 	Matrix4x4_Transform(&rsurface.inversematrix, r_refdef.view.origin, rsurface.localvieworigin);
+#ifdef VR_QUEST
+	Matrix4x4_Transform(&rsurface.inversematrix, r_vr_eyeorigin[0], rsurface.mv_localvieworigin[0]);
+	Matrix4x4_Transform(&rsurface.inversematrix, r_vr_eyeorigin[1], rsurface.mv_localvieworigin[1]);
+#endif
 	Matrix4x4_TransformStandardPlane(&rsurface.inversematrix, r_refdef.fogplane[0], r_refdef.fogplane[1], r_refdef.fogplane[2], r_refdef.fogplane[3], rsurface.fogplane);
 	rsurface.fogplaneviewdist = r_refdef.fogplaneviewdist * rsurface.inversematrixscale;
 	rsurface.fograngerecip = r_refdef.fograngerecip * rsurface.matrixscale;
@@ -7209,6 +7402,10 @@ void RSurf_ActiveCustomEntity(const matrix4x4_t *matrix, const matrix4x4_t *inve
 	rsurface.inversematrixscale = 1.0f / rsurface.matrixscale;
 	R_EntityMatrix(&rsurface.matrix);
 	Matrix4x4_Transform(&rsurface.inversematrix, r_refdef.view.origin, rsurface.localvieworigin);
+#ifdef VR_QUEST
+	Matrix4x4_Transform(&rsurface.inversematrix, r_vr_eyeorigin[0], rsurface.mv_localvieworigin[0]);
+	Matrix4x4_Transform(&rsurface.inversematrix, r_vr_eyeorigin[1], rsurface.mv_localvieworigin[1]);
+#endif
 	Matrix4x4_TransformStandardPlane(&rsurface.inversematrix, r_refdef.fogplane[0], r_refdef.fogplane[1], r_refdef.fogplane[2], r_refdef.fogplane[3], rsurface.fogplane);
 	rsurface.fogplaneviewdist *= rsurface.inversematrixscale;
 	rsurface.fograngerecip = r_refdef.fograngerecip * rsurface.matrixscale;

@@ -248,6 +248,11 @@ typedef struct r_viewport_s
 	int depth;
 	r_viewport_type_t type;
 	float screentodepth[2];    ///< used by deferred renderer to calculate linear depth from device depth coordinates
+#ifdef VR_QUEST
+	int multiview;             ///< VR: the mv_* matrices differ per eye (stereo world in one GL_OVR_multiview2 pass); else they mirror viewmatrix/projectmatrix
+	matrix4x4_t mv_viewmatrix[2];
+	matrix4x4_t mv_projectmatrix[2];
+#endif
 }
 r_viewport_t;
 
@@ -726,6 +731,9 @@ typedef struct rsurfacestate_s
 	skeleton_t *skeleton;
 	// view location in model space
 	vec3_t localvieworigin;
+#ifdef VR_QUEST
+	vec3_t mv_localvieworigin[2]; // VR multiview: each eye's location in model space (EyePosition[2])
+#endif
 	// polygon offset data for submodels
 	float basepolygonfactor;
 	float basepolygonoffset;
@@ -1002,5 +1010,10 @@ void Font_Init(void);
 
 qbool R_CompileShader_CheckStaticParms(void);
 void R_GLSL_Restart_f(cmd_state_t *cmd);
+#ifdef VR_QUEST
+extern vec3_t r_vr_eyeorigin[2];   ///< world-space eye positions of the current view (both = view origin outside multiview stereo)
+void R_VR_SetClipRect(qbool enabled, const float rect[2][4]); ///< multiview 2D clipping: per-view pixel rects (x0 y0 x1 y1) tested in the fragment shader
+void R_ResetViewRendering2D_VRMultiview(void);
+#endif
 
 #endif

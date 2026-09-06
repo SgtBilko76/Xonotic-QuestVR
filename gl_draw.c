@@ -787,12 +787,25 @@ void GL_Draw_Init (void)
 	R_RegisterModule("GL_Draw", gl_draw_start, gl_draw_shutdown, gl_draw_newmap, NULL, NULL);
 }
 
+#ifdef VR_QUEST
+// VR multiview: z of a 2D vertex is the per-eye half disparity of a projected point drawn there (0 = HUD depth)
+#define DRAWQ_Z(x, y, w, h) (VRH_MultiviewStereo() ? VRH_Get2DDisparity((x), (y), (x) + (w), (y) + (h)) : 0.0f)
+#else
+#define DRAWQ_Z(x, y, w, h) 0.0f
+#endif
+
 void DrawQ_Start(void)
 {
 	r_refdef.draw2dstage = 1;
 #ifdef VR_QUEST
 	{
 		int x, y, w, h;
+		if (VRH_MultiviewStereo())
+		{
+			// one 2D pass for both eyes: per-view ortho matrices place the canvas in each eye
+			R_ResetViewRendering2D_VRMultiview();
+			return;
+		}
 		// VR: the HUD canvas is shrunk to the centre of each eye and shifted per eye so it sits at a
 		// comfortable depth instead of at infinity
 		if (VRH_GetHudRect(&x, &y, &w, &h))
@@ -816,6 +829,7 @@ void DrawQ_Pic(float x, float y, cachepic_t *pic, float width, float height, flo
 	model_t *mod = CL_Mesh_UI();
 	msurface_t *surf;
 	int e0, e1, e2, e3;
+	float z;
 	if (!pic)
 		pic = Draw_CachePic("white");
 	// make sure pic is loaded - we don't use the texture here, Mod_Mesh_GetTexture looks up the skinframe by name
@@ -825,10 +839,11 @@ void DrawQ_Pic(float x, float y, cachepic_t *pic, float width, float height, flo
 	if (height == 0)
 		height = pic->height;
 	surf = Mod_Mesh_AddSurface(mod, Mod_Mesh_GetTexture(mod, pic->name, flags, pic->texflags, MATERIALFLAG_WALL | MATERIALFLAG_VERTEXCOLOR | MATERIALFLAG_ALPHAGEN_VERTEX | MATERIALFLAG_ALPHA | MATERIALFLAG_BLENDED | MATERIALFLAG_NOSHADOW), true);
-	e0 = Mod_Mesh_IndexForVertex(mod, surf, x        , y         , 0, 0, 0, -1, 0, 0, 0, 0, red, green, blue, alpha);
-	e1 = Mod_Mesh_IndexForVertex(mod, surf, x + width, y         , 0, 0, 0, -1, 1, 0, 0, 0, red, green, blue, alpha);
-	e2 = Mod_Mesh_IndexForVertex(mod, surf, x + width, y + height, 0, 0, 0, -1, 1, 1, 0, 0, red, green, blue, alpha);
-	e3 = Mod_Mesh_IndexForVertex(mod, surf, x        , y + height, 0, 0, 0, -1, 0, 1, 0, 0, red, green, blue, alpha);
+	z = DRAWQ_Z(x, y, width, height);
+	e0 = Mod_Mesh_IndexForVertex(mod, surf, x        , y         , z, 0, 0, -1, 0, 0, 0, 0, red, green, blue, alpha);
+	e1 = Mod_Mesh_IndexForVertex(mod, surf, x + width, y         , z, 0, 0, -1, 1, 0, 0, 0, red, green, blue, alpha);
+	e2 = Mod_Mesh_IndexForVertex(mod, surf, x + width, y + height, z, 0, 0, -1, 1, 1, 0, 0, red, green, blue, alpha);
+	e3 = Mod_Mesh_IndexForVertex(mod, surf, x        , y + height, z, 0, 0, -1, 0, 1, 0, 0, red, green, blue, alpha);
 	Mod_Mesh_AddTriangle(mod, surf, e0, e1, e2);
 	Mod_Mesh_AddTriangle(mod, surf, e0, e2, e3);
 }
@@ -844,6 +859,7 @@ void DrawQ_RotPic(float x, float y, cachepic_t *pic, float width, float height, 
 	model_t *mod = CL_Mesh_UI();
 	msurface_t *surf;
 	int e0, e1, e2, e3;
+	float z;
 	if (!pic)
 		pic = Draw_CachePic("white");
 	// make sure pic is loaded - we don't use the texture here, Mod_Mesh_GetTexture looks up the skinframe by name
@@ -853,10 +869,11 @@ void DrawQ_RotPic(float x, float y, cachepic_t *pic, float width, float height, 
 	if (height == 0)
 		height = pic->height;
 	surf = Mod_Mesh_AddSurface(mod, Mod_Mesh_GetTexture(mod, pic->name, flags, pic->texflags, MATERIALFLAG_WALL | MATERIALFLAG_VERTEXCOLOR | MATERIALFLAG_ALPHAGEN_VERTEX | MATERIALFLAG_ALPHA | MATERIALFLAG_BLENDED | MATERIALFLAG_NOSHADOW), true);
-	e0 = Mod_Mesh_IndexForVertex(mod, surf, x - cosaf *          org_x  - cosar *           org_y , y - sinaf *          org_x  - sinar *           org_y , 0, 0, 0, -1, 0, 0, 0, 0, red, green, blue, alpha);
-	e1 = Mod_Mesh_IndexForVertex(mod, surf, x + cosaf * (width - org_x) - cosar *           org_y , y + sinaf * (width - org_x) - sinar *           org_y , 0, 0, 0, -1, 1, 0, 0, 0, red, green, blue, alpha);
-	e2 = Mod_Mesh_IndexForVertex(mod, surf, x + cosaf * (width - org_x) + cosar * (height - org_y), y + sinaf * (width - org_x) + sinar * (height - org_y), 0, 0, 0, -1, 1, 1, 0, 0, red, green, blue, alpha);
-	e3 = Mod_Mesh_IndexForVertex(mod, surf, x - cosaf *          org_x  + cosar * (height - org_y), y - sinaf *          org_x  + sinar * (height - org_y), 0, 0, 0, -1, 0, 1, 0, 0, red, green, blue, alpha);
+	z = DRAWQ_Z(x - width - height, y - width - height, 2 * (width + height), 2 * (width + height));
+	e0 = Mod_Mesh_IndexForVertex(mod, surf, x - cosaf *          org_x  - cosar *           org_y , y - sinaf *          org_x  - sinar *           org_y , z, 0, 0, -1, 0, 0, 0, 0, red, green, blue, alpha);
+	e1 = Mod_Mesh_IndexForVertex(mod, surf, x + cosaf * (width - org_x) - cosar *           org_y , y + sinaf * (width - org_x) - sinar *           org_y , z, 0, 0, -1, 1, 0, 0, 0, red, green, blue, alpha);
+	e2 = Mod_Mesh_IndexForVertex(mod, surf, x + cosaf * (width - org_x) + cosar * (height - org_y), y + sinaf * (width - org_x) + sinar * (height - org_y), z, 0, 0, -1, 1, 1, 0, 0, red, green, blue, alpha);
+	e3 = Mod_Mesh_IndexForVertex(mod, surf, x - cosaf *          org_x  + cosar * (height - org_y), y - sinaf *          org_x  + sinar * (height - org_y), z, 0, 0, -1, 0, 1, 0, 0, red, green, blue, alpha);
 	Mod_Mesh_AddTriangle(mod, surf, e0, e1, e2);
 	Mod_Mesh_AddTriangle(mod, surf, e0, e2, e3);
 }
@@ -1103,7 +1120,7 @@ float DrawQ_String_Scale(float startx, float starty, const char *text, size_t ma
 {
 	int shadow, colorindex = STRING_COLOR_DEFAULT;
 	size_t i;
-	float x = startx, y, s, t, u, v, thisw;
+	float x = startx, y, s, t, u, v, thisw, z;
 	Uchar ch, mapch, nextch;
 	Uchar prevch = 0; // used for kerning
 	int map_index = 0;
@@ -1274,10 +1291,11 @@ float DrawQ_String_Scale(float startx, float starty, const char *text, size_t ma
 					v = 0.0625f - (1.0f / th);
 				}
 				surf = Mod_Mesh_AddSurface(mod, Mod_Mesh_GetTexture(mod, fnt->pic->name, flags, TEXF_ALPHA | TEXF_CLAMP, MATERIALFLAG_WALL | MATERIALFLAG_VERTEXCOLOR | MATERIALFLAG_ALPHAGEN_VERTEX | MATERIALFLAG_ALPHA | MATERIALFLAG_BLENDED | MATERIALFLAG_NOSHADOW), true);
-				e0 = Mod_Mesh_IndexForVertex(mod, surf, x         , y   , 10, 0, 0, -1, s  , t  , 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
-				e1 = Mod_Mesh_IndexForVertex(mod, surf, x+dw*thisw, y   , 10, 0, 0, -1, s+u, t  , 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
-				e2 = Mod_Mesh_IndexForVertex(mod, surf, x+dw*thisw, y+dh, 10, 0, 0, -1, s+u, t+v, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
-				e3 = Mod_Mesh_IndexForVertex(mod, surf, x         , y+dh, 10, 0, 0, -1, s  , t+v, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
+				z = DRAWQ_Z(x, y, dw * thisw, dh);
+				e0 = Mod_Mesh_IndexForVertex(mod, surf, x         , y   , z, 0, 0, -1, s  , t  , 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
+				e1 = Mod_Mesh_IndexForVertex(mod, surf, x+dw*thisw, y   , z, 0, 0, -1, s+u, t  , 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
+				e2 = Mod_Mesh_IndexForVertex(mod, surf, x+dw*thisw, y+dh, z, 0, 0, -1, s+u, t+v, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
+				e3 = Mod_Mesh_IndexForVertex(mod, surf, x         , y+dh, z, 0, 0, -1, s  , t+v, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
 				Mod_Mesh_AddTriangle(mod, surf, e0, e1, e2);
 				Mod_Mesh_AddTriangle(mod, surf, e0, e2, e3);
 				x += width_of[ch] * dw;
@@ -1304,10 +1322,11 @@ float DrawQ_String_Scale(float startx, float starty, const char *text, size_t ma
 				else
 					kx = ky = 0;
 				surf = Mod_Mesh_AddSurface(mod, Mod_Mesh_GetTexture(mod, map->pic->name, flags, TEXF_ALPHA | TEXF_CLAMP, MATERIALFLAG_WALL | MATERIALFLAG_VERTEXCOLOR | MATERIALFLAG_ALPHAGEN_VERTEX | MATERIALFLAG_ALPHA | MATERIALFLAG_BLENDED | MATERIALFLAG_NOSHADOW), true);
-				e0 = Mod_Mesh_IndexForVertex(mod, surf, x + dw * map->glyphs[mapch].vxmin, y + dh * map->glyphs[mapch].vymin, 10, 0, 0, -1, map->glyphs[mapch].txmin, map->glyphs[mapch].tymin, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
-				e1 = Mod_Mesh_IndexForVertex(mod, surf, x + dw * map->glyphs[mapch].vxmax, y + dh * map->glyphs[mapch].vymin, 10, 0, 0, -1, map->glyphs[mapch].txmax, map->glyphs[mapch].tymin, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
-				e2 = Mod_Mesh_IndexForVertex(mod, surf, x + dw * map->glyphs[mapch].vxmax, y + dh * map->glyphs[mapch].vymax, 10, 0, 0, -1, map->glyphs[mapch].txmax, map->glyphs[mapch].tymax, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
-				e3 = Mod_Mesh_IndexForVertex(mod, surf, x + dw * map->glyphs[mapch].vxmin, y + dh * map->glyphs[mapch].vymax, 10, 0, 0, -1, map->glyphs[mapch].txmin, map->glyphs[mapch].tymax, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
+				z = DRAWQ_Z(x + dw * map->glyphs[mapch].vxmin, y + dh * map->glyphs[mapch].vymin, dw * (map->glyphs[mapch].vxmax - map->glyphs[mapch].vxmin), dh * (map->glyphs[mapch].vymax - map->glyphs[mapch].vymin));
+				e0 = Mod_Mesh_IndexForVertex(mod, surf, x + dw * map->glyphs[mapch].vxmin, y + dh * map->glyphs[mapch].vymin, z, 0, 0, -1, map->glyphs[mapch].txmin, map->glyphs[mapch].tymin, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
+				e1 = Mod_Mesh_IndexForVertex(mod, surf, x + dw * map->glyphs[mapch].vxmax, y + dh * map->glyphs[mapch].vymin, z, 0, 0, -1, map->glyphs[mapch].txmax, map->glyphs[mapch].tymin, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
+				e2 = Mod_Mesh_IndexForVertex(mod, surf, x + dw * map->glyphs[mapch].vxmax, y + dh * map->glyphs[mapch].vymax, z, 0, 0, -1, map->glyphs[mapch].txmax, map->glyphs[mapch].tymax, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
+				e3 = Mod_Mesh_IndexForVertex(mod, surf, x + dw * map->glyphs[mapch].vxmin, y + dh * map->glyphs[mapch].vymax, z, 0, 0, -1, map->glyphs[mapch].txmin, map->glyphs[mapch].tymax, 0, 0, DrawQ_Color[0], DrawQ_Color[1], DrawQ_Color[2], DrawQ_Color[3]);
 				Mod_Mesh_AddTriangle(mod, surf, e0, e1, e2);
 				Mod_Mesh_AddTriangle(mod, surf, e0, e2, e3);
 				//x -= ftbase_x;
@@ -1399,6 +1418,7 @@ void DrawQ_SuperPic(float x, float y, cachepic_t *pic, float width, float height
 	model_t *mod = CL_Mesh_UI();
 	msurface_t *surf;
 	int e0, e1, e2, e3;
+	float z;
 	if (!pic)
 		pic = Draw_CachePic("white");
 	// make sure pic is loaded - we don't use the texture here, Mod_Mesh_GetTexture looks up the skinframe by name
@@ -1408,10 +1428,11 @@ void DrawQ_SuperPic(float x, float y, cachepic_t *pic, float width, float height
 	if (height == 0)
 		height = pic->height;
 	surf = Mod_Mesh_AddSurface(mod, Mod_Mesh_GetTexture(mod, pic->name, flags, pic->texflags, MATERIALFLAG_WALL | MATERIALFLAG_VERTEXCOLOR | MATERIALFLAG_ALPHAGEN_VERTEX | MATERIALFLAG_ALPHA | MATERIALFLAG_BLENDED | MATERIALFLAG_NOSHADOW), true);
-	e0 = Mod_Mesh_IndexForVertex(mod, surf, x        , y         , 0, 0, 0, -1, s1, t1, 0, 0, r1, g1, b1, a1);
-	e1 = Mod_Mesh_IndexForVertex(mod, surf, x + width, y         , 0, 0, 0, -1, s2, t2, 0, 0, r2, g2, b2, a2);
-	e2 = Mod_Mesh_IndexForVertex(mod, surf, x + width, y + height, 0, 0, 0, -1, s4, t4, 0, 0, r4, g4, b4, a4);
-	e3 = Mod_Mesh_IndexForVertex(mod, surf, x        , y + height, 0, 0, 0, -1, s3, t3, 0, 0, r3, g3, b3, a3);
+	z = DRAWQ_Z(x, y, width, height);
+	e0 = Mod_Mesh_IndexForVertex(mod, surf, x        , y         , z, 0, 0, -1, s1, t1, 0, 0, r1, g1, b1, a1);
+	e1 = Mod_Mesh_IndexForVertex(mod, surf, x + width, y         , z, 0, 0, -1, s2, t2, 0, 0, r2, g2, b2, a2);
+	e2 = Mod_Mesh_IndexForVertex(mod, surf, x + width, y + height, z, 0, 0, -1, s4, t4, 0, 0, r4, g4, b4, a4);
+	e3 = Mod_Mesh_IndexForVertex(mod, surf, x        , y + height, z, 0, 0, -1, s3, t3, 0, 0, r3, g3, b3, a3);
 	Mod_Mesh_AddTriangle(mod, surf, e0, e1, e2);
 	Mod_Mesh_AddTriangle(mod, surf, e0, e2, e3);
 }
@@ -1421,7 +1442,7 @@ void DrawQ_Line (float width, float x1, float y1, float x2, float y2, float r, f
 	model_t *mod = CL_Mesh_UI();
 	msurface_t *surf;
 	int e0, e1, e2, e3;
-	float offsetx, offsety;
+	float offsetx, offsety, z;
 	// width is measured in real pixels
 	if (fabs(x2 - x1) > fabs(y2 - y1))
 	{
@@ -1434,10 +1455,11 @@ void DrawQ_Line (float width, float x1, float y1, float x2, float y2, float r, f
 		offsety = 0;
 	}
 	surf = Mod_Mesh_AddSurface(mod, Mod_Mesh_GetTexture(mod, "white", 0, 0, MATERIALFLAG_WALL | MATERIALFLAG_VERTEXCOLOR | MATERIALFLAG_ALPHAGEN_VERTEX | MATERIALFLAG_ALPHA | MATERIALFLAG_BLENDED | MATERIALFLAG_NOSHADOW), true);
-	e0 = Mod_Mesh_IndexForVertex(mod, surf, x1 - offsetx, y1 - offsety, 10, 0, 0, -1, 0, 0, 0, 0, r, g, b, alpha);
-	e1 = Mod_Mesh_IndexForVertex(mod, surf, x2 - offsetx, y2 - offsety, 10, 0, 0, -1, 0, 0, 0, 0, r, g, b, alpha);
-	e2 = Mod_Mesh_IndexForVertex(mod, surf, x2 + offsetx, y2 + offsety, 10, 0, 0, -1, 0, 0, 0, 0, r, g, b, alpha);
-	e3 = Mod_Mesh_IndexForVertex(mod, surf, x1 + offsetx, y1 + offsety, 10, 0, 0, -1, 0, 0, 0, 0, r, g, b, alpha);
+	z = DRAWQ_Z(min(x1, x2), min(y1, y2), fabs(x2 - x1), fabs(y2 - y1));
+	e0 = Mod_Mesh_IndexForVertex(mod, surf, x1 - offsetx, y1 - offsety, z, 0, 0, -1, 0, 0, 0, 0, r, g, b, alpha);
+	e1 = Mod_Mesh_IndexForVertex(mod, surf, x2 - offsetx, y2 - offsety, z, 0, 0, -1, 0, 0, 0, 0, r, g, b, alpha);
+	e2 = Mod_Mesh_IndexForVertex(mod, surf, x2 + offsetx, y2 + offsety, z, 0, 0, -1, 0, 0, 0, 0, r, g, b, alpha);
+	e3 = Mod_Mesh_IndexForVertex(mod, surf, x1 + offsetx, y1 + offsety, z, 0, 0, -1, 0, 0, 0, 0, r, g, b, alpha);
 	Mod_Mesh_AddTriangle(mod, surf, e0, e1, e2);
 	Mod_Mesh_AddTriangle(mod, surf, e0, e2, e3);
 }
@@ -1450,6 +1472,32 @@ void DrawQ_SetClipArea(float x, float y, float width, float height)
 #ifdef VR_QUEST
 	{
 		int hx, hy, hw, hh;
+		if (VRH_MultiviewStereo())
+		{
+			// one pass for both eyes: a single scissor cannot fit both eyes' canvases, so the
+			// exact per-view pixel rect is applied in the fragment shader (R_VR_SetClipRect)
+			// and the scissor is only narrowed to the union of the two
+			float rect[2][4];
+			int eye, ux0 = 0, uy0 = 0, ux1 = 0, uy1 = 0;
+			for (eye = 0; eye < 2; eye++)
+			{
+				VRH_GetHudRectEye(eye, &hx, &hy, &hw, &hh);
+				ix = (int)(0.5 + x * ((float)hw / vid_conwidth.integer)) + hx;
+				iy = (int)(0.5 + y * ((float)hh / vid_conheight.integer)) + hy;
+				iw = (int)(0.5 + width * ((float)hw / vid_conwidth.integer));
+				ih = (int)(0.5 + height * ((float)hh / vid_conheight.integer));
+				rect[eye][0] = ix;
+				rect[eye][1] = vid.mode.height - iy - ih;
+				rect[eye][2] = ix + iw;
+				rect[eye][3] = vid.mode.height - iy;
+				if (eye == 0) { ux0 = ix; uy0 = vid.mode.height - iy - ih; ux1 = ix + iw; uy1 = vid.mode.height - iy; }
+				else { ux0 = min(ux0, ix); uy0 = min(uy0, vid.mode.height - iy - ih); ux1 = max(ux1, ix + iw); uy1 = max(uy1, vid.mode.height - iy); }
+			}
+			R_VR_SetClipRect(true, rect);
+			GL_Scissor(ux0, uy0, ux1 - ux0, uy1 - uy0);
+			GL_ScissorTest(true);
+			return;
+		}
 		// VR: con coords live on the shrunken, per-eye shifted HUD canvas
 		if (VRH_GetHudRect(&hx, &hy, &hw, &hh))
 		{
@@ -1484,12 +1532,18 @@ void DrawQ_ResetClipArea(void)
 {
 	DrawQ_FlushUI();
 	GL_ScissorTest(false);
+#ifdef VR_QUEST
+	R_VR_SetClipRect(false, NULL);
+#endif
 }
 
 void DrawQ_Finish(void)
 {
 	DrawQ_FlushUI();
 	r_refdef.draw2dstage = 0;
+#ifdef VR_QUEST
+	R_VR_SetClipRect(false, NULL);
+#endif
 }
 
 void DrawQ_RecalcView(void)
