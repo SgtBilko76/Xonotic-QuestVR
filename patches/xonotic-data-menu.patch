@@ -1,0 +1,57 @@
+From 8be536b8f19ac25644e881d089bf82b3cb7404d4 Mon Sep 17 00:00:00 2001
+From: "Sgt.Bilko" <59089219+SgtBilko76@users.noreply.github.com>
+Date: Sun, 13 Sep 2026 18:25:59 +0200
+Subject: [PATCH] quest-vr menu: space/backspace keys in the charmap, VR mod
+ credit
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ qcsrc/menu/xonotic/charmap.qc | 11 ++++++++++-
+ qcsrc/menu/xonotic/credits.qc |  2 ++
+ 2 files changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/qcsrc/menu/xonotic/charmap.qc b/qcsrc/menu/xonotic/charmap.qc
+index 28f67d9..7e38de3 100644
+--- a/qcsrc/menu/xonotic/charmap.qc
++++ b/qcsrc/menu/xonotic/charmap.qc
+@@ -7,7 +7,7 @@ string CHARMAP =
+ 	"🌍🌎🌏🚀🌌👽🔫⌖❇❈←↑→↓"
+ 	"☠☣☢⚛⚡⚙🔥❌⚠⛔❰❱❲❳"
+ 	"😃😊😁😄😆😎😈😇😉😛😝😘❤ "
+-	"😐😒😕😮😲😞😟😠😣😭😵😴  "
++	"😐😒😕😮😲😞😟😠😣😭😵😴␣⌫"
+ 	"\xEE\x83\xA1\xEE\x83\xA2\xEE\x83\xA3\xEE\x83\xA4\xEE\x83\xA5\xEE\x83\xA6\xEE\x83\xA7"
+ 	"\xEE\x83\xA8\xEE\x83\xA9\xEE\x83\xAA\xEE\x83\xAB\xEE\x83\xAC\xEE\x83\xAD\xEE\x83\xAE"
+ 	"\xEE\x83\xAF\xEE\x83\xB0\xEE\x83\xB1\xEE\x83\xB2\xEE\x83\xB3\xEE\x83\xB4\xEE\x83\xB5"
+@@ -77,6 +77,15 @@ float XonoticCharmap_keyDown(entity me, float key, float ascii, float shift)
+ void XonoticCharmap_cellSelect(entity me, vector cell)
+ {
+ 	string character = charmap_cellToChar(me, cell);
++	if(character == "␣") // space key
++		character = " ";
++	else if(character == "⌫") // backspace key
++	{
++		me.inputBox.keyDown(me.inputBox, K_BACKSPACE, 8, 0);
++		if(me.inputBox.applyButton)
++			me.inputBox.applyButton.disabled = false;
++		return;
++	}
+ 	if(character != "")
+ 	{
+ 		me.inputBox.enterText(me.inputBox, character);
+diff --git a/qcsrc/menu/xonotic/credits.qc b/qcsrc/menu/xonotic/credits.qc
+index f23e58b..0e4f2c5 100644
+--- a/qcsrc/menu/xonotic/credits.qc
++++ b/qcsrc/menu/xonotic/credits.qc
+@@ -1,6 +1,8 @@
+ #include "credits.qh"
+ 
+ #define CREDITS(TITLE, FUNCTION, PERSON, PERSON_, NL) \
++	TITLE("VR Mod by Sgt.Bilko") \
++	NL() \
+ 	TITLE(_("Core Team")) \
+ 		PERSON(Rudolf "divVerent" Polzer) \
+ 		PERSON(Ant "Antibody" Zucaro) \
+-- 
+2.53.0
+
