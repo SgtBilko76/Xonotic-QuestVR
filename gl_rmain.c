@@ -97,6 +97,7 @@ cvar_t r_drawportals = {CF_CLIENT, "r_drawportals", "0", "shows portals (separat
 cvar_t r_drawentities = {CF_CLIENT, "r_drawentities","1", "draw entities (doors, players, projectiles, etc)"};
 cvar_t r_draw2d = {CF_CLIENT, "r_draw2d","1", "draw 2D stuff (dangerous to turn off)"};
 cvar_t r_drawworld = {CF_CLIENT, "r_drawworld","1", "draw world (most static stuff)"};
+cvar_t r_reflectcube = {CF_CLIENT | CF_ARCHIVE, "r_reflectcube","1", "environment-cube reflection on glossy surfaces (adds the reflectcube, usually the sky, to reflectmasked materials); 0 disables it (VR: the sky reflection on walls reads as an artifact)"};
 cvar_t r_drawviewmodel = {CF_CLIENT, "r_drawviewmodel","1", "draw your weapon model"};
 cvar_t r_drawexteriormodel = {CF_CLIENT, "r_drawexteriormodel","1", "draw your player model (e.g. in chase cam, reflections)"};
 cvar_t r_cullentities_trace = {CF_CLIENT, "r_cullentities_trace", "1", "probabistically cull invisible entities"};
@@ -3359,6 +3360,7 @@ void GL_Main_Init(void)
 	Cvar_RegisterVariable(&r_drawentities);
 	Cvar_RegisterVariable(&r_draw2d);
 	Cvar_RegisterVariable(&r_drawworld);
+	Cvar_RegisterVariable(&r_reflectcube);
 	Cvar_RegisterVariable(&r_cullentities_trace);
 	Cvar_RegisterVariable(&r_cullentities_trace_entityocclusion);
 	Cvar_RegisterVariable(&r_cullentities_trace_samples);
@@ -5870,9 +5872,15 @@ void R_RenderView(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture, i
 		VRH_GetUnionFovTangents(&tx, &ty);
 		if (VRH_MultiviewStereo())
 		{
-			// the single culling frustum sits at the head, slightly inside each eye: widen it a little
-			tx *= 1.05f;
-			ty *= 1.05f;
+			// One culling frustum for both eyes, anchored at the head. The eyes are offset
+			// ~IPD/2 sideways with asymmetric projections, so a head-anchored union-FOV frustum
+			// clips slightly short of what an eye actually sees - a surface an offset eye can see
+			// gets culled and you see the skybox straight through the wall behind it (worst on
+			// near/peripheral surfaces). A tight 1.05 margin let that happen; widen generously so
+			// the head frustum covers both eyes down to arm's-length walls. The extra periphery
+			// overdraw is cheap here (foveated, plenty of GPU headroom).
+			tx *= 1.25f;
+			ty *= 1.15f;
 		}
 		r_refdef.view.frustum_x = tx * VRH_GetZoom();
 		r_refdef.view.frustum_y = ty * VRH_GetZoom();
@@ -7041,7 +7049,10 @@ texture_t *R_GetCurrentTexture(texture_t *t)
 	t->glosstexture = r_texture_black;
 	t->glowtexture = t->currentskinframe->glow;
 	t->fogtexture = t->currentskinframe->fog;
-	t->reflectmasktexture = t->currentskinframe->reflect;
+	// r_reflectcube 0 nulls the reflectmask so no material takes the REFLECTCUBE shader
+	// permutation (all four gates test t->reflectmasktexture) - in VR the sky reflected on
+	// glossy walls reads as a graphical artifact
+	t->reflectmasktexture = r_reflectcube.integer ? t->currentskinframe->reflect : NULL;
 	if (t->backgroundshaderpass)
 	{
 		for (i = 0, tcmod = t->backgroundshaderpass->tcmods; i < Q3MAXTCMODS && tcmod->tcmod; i++, tcmod++)
