@@ -64,7 +64,14 @@ android {
         }
     }
 
-    lint { abortOnError = false }
+    lint {
+        abortOnError = false
+        // Release builds run a separate "lintVital" pass that's fatal
+        // regardless of abortOnError for a few Play Store policy checks --
+        // ExpiredTargetSdkVersion is one of them. Moot here: this is a
+        // sideloaded VR app, never distributed through Play.
+        disable += "ExpiredTargetSdkVersion"
+    }
 
     // the bundled pk3s are already zip archives: store them uncompressed so the
     // launcher can size-check and stream them out quickly

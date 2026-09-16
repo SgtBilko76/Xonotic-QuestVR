@@ -1,10 +1,9 @@
-From 8be536b8f19ac25644e881d089bf82b3cb7404d4 Mon Sep 17 00:00:00 2001
+From 489271fbd4fd9e895e4f2f451c14eea339c16ced Mon Sep 17 00:00:00 2001
 From: "Sgt.Bilko" <59089219+SgtBilko76@users.noreply.github.com>
 Date: Sun, 13 Sep 2026 18:25:59 +0200
 Subject: [PATCH] quest-vr menu: space/backspace keys in the charmap, VR mod
  credit
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ---
  qcsrc/menu/xonotic/charmap.qc | 11 ++++++++++-
  qcsrc/menu/xonotic/credits.qc |  2 ++
