@@ -11,9 +11,12 @@ import android.os.Environment;
 import android.provider.Settings;
 import android.util.Log;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 
 /**
  * Plain launcher activity: makes sure we may read/write /sdcard/XonoticVR, unpacks the
@@ -90,7 +93,10 @@ public class LauncherActivity extends Activity {
 
         // First-run defaults; never overwrite user edits.
         copyAsset("commandline.txt", new File(root, "commandline.txt"));
-        copyAsset("vr.cfg", new File(data, "vr.cfg"));
+        // vr.cfg is regenerated (not just first-run copied) whenever its XONOTICVR_VRCFG_REV
+        // marker changes, so bundled fixes actually reach devices that installed an earlier
+        // build instead of being silently skipped forever by copyAsset()'s exists() check.
+        copyVrConfig(new File(data, "vr.cfg"));
         // menu override: adds Space/Backspace keys to the name editor's character map
         copyAsset("zzz-xonoticvr-menu.pk3", new File(data, "zzz-xonoticvr-menu.pk3"));
         copyAsset("README.txt", new File(root, "README.txt"));
@@ -124,6 +130,44 @@ public class LauncherActivity extends Activity {
             }
         } catch (Exception e) {
             Log.w(TAG, "Could not unpack game data: " + e);
+        }
+    }
+
+    // Reads the "// XONOTICVR_VRCFG_REV <n>" marker on the first line, or null if absent/unreadable.
+    private String vrCfgRev(BufferedReader r) {
+        try {
+            String line = r.readLine();
+            if (line != null && line.startsWith("// XONOTICVR_VRCFG_REV "))
+                return line;
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private void copyVrConfig(File to) {
+        String bundledRev;
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(getAssets().open("vr.cfg")))) {
+            bundledRev = vrCfgRev(r);
+        } catch (Exception e) {
+            Log.w(TAG, "Could not read bundled vr.cfg: " + e);
+            return;
+        }
+        if (to.exists()) {
+            String deployedRev;
+            try (BufferedReader r = new BufferedReader(new FileReader(to))) {
+                deployedRev = vrCfgRev(r);
+            } catch (Exception e) {
+                deployedRev = null;
+            }
+            if (bundledRev != null && bundledRev.equals(deployedRev)) return; // already current
+            Log.i(TAG, "vr.cfg outdated (device: " + deployedRev + ", bundled: " + bundledRev + "), regenerating");
+        }
+        try (InputStream in = getAssets().open("vr.cfg"); FileOutputStream out = new FileOutputStream(to)) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            Log.i(TAG, "Unpacked " + to);
+        } catch (Exception e) {
+            Log.w(TAG, "Could not unpack vr.cfg: " + e);
         }
     }
 
