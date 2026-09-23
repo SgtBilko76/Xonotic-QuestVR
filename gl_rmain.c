@@ -97,7 +97,13 @@ cvar_t r_drawportals = {CF_CLIENT, "r_drawportals", "0", "shows portals (separat
 cvar_t r_drawentities = {CF_CLIENT, "r_drawentities","1", "draw entities (doors, players, projectiles, etc)"};
 cvar_t r_draw2d = {CF_CLIENT, "r_draw2d","1", "draw 2D stuff (dangerous to turn off)"};
 cvar_t r_drawworld = {CF_CLIENT, "r_drawworld","1", "draw world (most static stuff)"};
-cvar_t r_reflectcube = {CF_CLIENT | CF_ARCHIVE, "r_reflectcube","1", "environment-cube reflection on glossy surfaces (adds the reflectcube, usually the sky, to reflectmasked materials); 0 disables it (VR: the sky reflection on walls reads as an artifact)"};
+cvar_t r_reflectcube = {CF_CLIENT | CF_ARCHIVE, "r_reflectcube","1", "environment-cube reflection on glossy surfaces (adds the reflectcube, usually the sky, to reflectmasked materials); 0 substitutes a neutral white cubemap instead, keeping surfaces shiny-looking without the sky image (VR: reflecting the actual sky on nearby glossy surfaces reads as an artifact)"};
+// r_reflectcube (above) only gates the engine's own skin-based reflectmask system; Q3 shader
+// scripts can independently request a spheremap reflection via "tcGen environment" on a shader
+// stage (chrome/glass/metal trim materials) - a different mechanism entirely, unaffected by
+// r_reflectcube. In VR this reads the same way (sky/background reflected on walls), so give it
+// its own switch (VR: user-reported 2026-09-16, r_reflectcube alone did not fix it).
+cvar_t r_tcgen_environment = {CF_CLIENT | CF_ARCHIVE, "r_tcgen_environment","1", "allow Q3 shader scripts to spheremap-reflect the environment onto \"tcGen environment\" surfaces (chrome/glass trim); 0 disables it (VR: reads as background bleeding through walls)"};
 cvar_t r_drawviewmodel = {CF_CLIENT, "r_drawviewmodel","1", "draw your weapon model"};
 cvar_t r_drawexteriormodel = {CF_CLIENT, "r_drawexteriormodel","1", "draw your player model (e.g. in chase cam, reflections)"};
 cvar_t r_cullentities_trace = {CF_CLIENT, "r_cullentities_trace", "1", "probabistically cull invisible entities"};
@@ -2137,7 +2143,7 @@ void R_SetupShader_Surface(const float rtlightambient[3], const float rtlightdif
 		if (r_glsl_permutation->tex_Texture_Pants           >= 0) R_Mesh_TexBind(r_glsl_permutation->tex_Texture_Pants            , t->pantstexture                      );
 		if (r_glsl_permutation->tex_Texture_Shirt           >= 0) R_Mesh_TexBind(r_glsl_permutation->tex_Texture_Shirt            , t->shirttexture                      );
 		if (r_glsl_permutation->tex_Texture_ReflectMask     >= 0) R_Mesh_TexBind(r_glsl_permutation->tex_Texture_ReflectMask      , t->reflectmasktexture                );
-		if (r_glsl_permutation->tex_Texture_ReflectCube     >= 0) R_Mesh_TexBind(r_glsl_permutation->tex_Texture_ReflectCube      , t->reflectcubetexture ? t->reflectcubetexture : r_texture_whitecube);
+		if (r_glsl_permutation->tex_Texture_ReflectCube     >= 0) R_Mesh_TexBind(r_glsl_permutation->tex_Texture_ReflectCube      , (r_reflectcube.integer && t->reflectcubetexture) ? t->reflectcubetexture : r_texture_whitecube);
 		if (r_glsl_permutation->tex_Texture_FogHeightTexture>= 0) R_Mesh_TexBind(r_glsl_permutation->tex_Texture_FogHeightTexture , r_texture_fogheighttexture                          );
 		if (r_glsl_permutation->tex_Texture_FogMask         >= 0) R_Mesh_TexBind(r_glsl_permutation->tex_Texture_FogMask          , r_texture_fogattenuation                            );
 		if (r_glsl_permutation->tex_Texture_Lightmap        >= 0) R_Mesh_TexBind(r_glsl_permutation->tex_Texture_Lightmap         , rsurface.lightmaptexture ? rsurface.lightmaptexture : r_texture_white);
@@ -3361,6 +3367,7 @@ void GL_Main_Init(void)
 	Cvar_RegisterVariable(&r_draw2d);
 	Cvar_RegisterVariable(&r_drawworld);
 	Cvar_RegisterVariable(&r_reflectcube);
+	Cvar_RegisterVariable(&r_tcgen_environment);
 	Cvar_RegisterVariable(&r_cullentities_trace);
 	Cvar_RegisterVariable(&r_cullentities_trace_entityocclusion);
 	Cvar_RegisterVariable(&r_cullentities_trace_samples);
@@ -4098,7 +4105,15 @@ static void R_View_UpdateEntityVisible (void)
 		for (i = 0;i < r_refdef.scene.numentities;i++)
 		{
 			ent = r_refdef.scene.entities[i];
+			// world_novis here also covers VR's deliberate PVS bypass below (real leaf data
+			// exists in that case, just frustum-only instead of PVS-filtered), so entities
+			// should still get a proper box-visibility check, not this "no vis data at all,
+			// floating in the void" fallback that hides everything but the view model.
+#ifdef VR_QUEST
+			if (r_refdef.viewcache.world_novis && !(ent->flags & RENDER_VIEWMODEL) && !VRH_Available())
+#else
 			if (r_refdef.viewcache.world_novis && !(ent->flags & RENDER_VIEWMODEL))
+#endif
 			{
 				r_refdef.viewcache.entityvisible[i] = false;
 				continue;
@@ -4460,7 +4475,19 @@ static void R_View_Update(const int *myscissor)
 {
 	R_Main_ResizeViewCache();
 	R_View_SetFrustum(myscissor);
+	// Bypass the map's precomputed PVS/portal visibility in VR, using frustum-only culling
+	// instead (still real leaf data - see the entity-visibility exception in
+	// R_View_UpdateEntityVisible above for why this doesn't just mean "no vis data").
+	// Root cause found and confirmed by the user 2026-09-16: the map's compiled visibility
+	// data is computed for a conventional desktop camera and doesn't account for VR's much
+	// wider effective FOV (union of both eyes, plus the culling-frustum margin added earlier
+	// the same day) - nearby walls just outside the PVS set for the exact eye position were
+	// never drawn at all, so the sky (drawn first, see r_sky.c) stayed visible through them.
+#ifdef VR_QUEST
+	R_View_WorldVisibility(VRH_Available() || !r_refdef.view.usevieworiginculling);
+#else
 	R_View_WorldVisibility(!r_refdef.view.usevieworiginculling);
+#endif
 	R_View_UpdateEntityVisible();
 }
 
@@ -5870,18 +5897,19 @@ void R_RenderView(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture, i
 		}
 		// cull with the union of both eyes' fov (the projection itself is asymmetric per eye)
 		VRH_GetUnionFovTangents(&tx, &ty);
-		if (VRH_MultiviewStereo())
-		{
-			// One culling frustum for both eyes, anchored at the head. The eyes are offset
-			// ~IPD/2 sideways with asymmetric projections, so a head-anchored union-FOV frustum
-			// clips slightly short of what an eye actually sees - a surface an offset eye can see
-			// gets culled and you see the skybox straight through the wall behind it (worst on
-			// near/peripheral surfaces). A tight 1.05 margin let that happen; widen generously so
-			// the head frustum covers both eyes down to arm's-length walls. The extra periphery
-			// overdraw is cheap here (foveated, plenty of GPU headroom).
-			tx *= 1.25f;
-			ty *= 1.15f;
-		}
+		// The culling frustum is anchored at the head (even in the two-pass path, where each
+		// eye's own matrix is offset correctly for rendering but frustum_x/y here still comes
+		// from the head-anchored union-FOV estimate above, not this eye's actual asymmetric
+		// FOV). The eyes are offset ~IPD/2 sideways, so that head-anchored estimate clips
+		// slightly short of what an eye actually sees - a surface an offset eye can see gets
+		// culled and you see the skybox straight through the wall behind it (worst on near/
+		// peripheral surfaces). This isn't specific to multiview: user-confirmed 2026-09-16
+		// still visible with vr_multiview 0, so a 1.25/1.15 margin applied to multiview only
+		// was insufficient and didn't cover the two-pass path at all. Widen generously and
+		// unconditionally so the head frustum covers both eyes down to arm's-length walls.
+		// The extra periphery overdraw is cheap here (foveated, plenty of GPU headroom).
+		tx *= 1.35f;
+		ty *= 1.25f;
 		r_refdef.view.frustum_x = tx * VRH_GetZoom();
 		r_refdef.view.frustum_y = ty * VRH_GetZoom();
 	}
@@ -7049,10 +7077,20 @@ texture_t *R_GetCurrentTexture(texture_t *t)
 	t->glosstexture = r_texture_black;
 	t->glowtexture = t->currentskinframe->glow;
 	t->fogtexture = t->currentskinframe->fog;
-	// r_reflectcube 0 nulls the reflectmask so no material takes the REFLECTCUBE shader
-	// permutation (all four gates test t->reflectmasktexture) - in VR the sky reflected on
-	// glossy walls reads as a graphical artifact
-	t->reflectmasktexture = r_reflectcube.integer ? t->currentskinframe->reflect : NULL;
+	// Keep the reflectmask itself (it's the material's own authored shininess/shape map -
+	// some materials, like chrome trim, have no other texture at all and render blank/flat
+	// without it, as found 2026-09-16). r_reflectcube instead controls what content the
+	// mask blends in, below at the ReflectCube texture bind - "usually the sky", which in VR
+	// reads as a graphical artifact on nearby glossy surfaces; 0 substitutes a neutral white
+	// cubemap so surfaces stay shiny-looking without importing the sky image.
+	t->reflectmasktexture = t->currentskinframe->reflect;
+	// materials that set only "dpreflectcube" in their shader script (no separate reflectmask
+	// asset - e.g. glassx.shader's hexglass, dpreflectcube cubemaps/default/sky) would otherwise
+	// never take the REFLECTCUBE permutation at all (it gates on reflectmasktexture, not
+	// reflectcubetexture), so r_reflectcube's neutral-cubemap substitution below never even ran
+	// for them - found 2026-09-16 after r_reflectcube alone didn't stop sky content on glass.
+	if (!t->reflectmasktexture && t->reflectcubetexture)
+		t->reflectmasktexture = r_texture_white;
 	if (t->backgroundshaderpass)
 	{
 		for (i = 0, tcmod = t->backgroundshaderpass->tcmods; i < Q3MAXTCMODS && tcmod->tcmod; i++, tcmod++)
@@ -7823,7 +7861,10 @@ void RSurf_PrepareVerticesForBatch(int batchneed, int texturenumsurfaces, const 
 	}
 	if (rsurface.texture->materialshaderpass)
 	{
-		switch (rsurface.texture->materialshaderpass->tcgen.tcgen)
+		q3tcgen_t tcgen = rsurface.texture->materialshaderpass->tcgen.tcgen;
+		if (tcgen == Q3TCGEN_ENVIRONMENT && !r_tcgen_environment.integer)
+			tcgen = Q3TCGEN_TEXTURE;
+		switch (tcgen)
 		{
 		default:
 		case Q3TCGEN_TEXTURE:
@@ -8645,7 +8686,10 @@ void RSurf_PrepareVerticesForBatch(int batchneed, int texturenumsurfaces, const 
 	if (rsurface.batchtexcoordtexture2f && rsurface.texture->materialshaderpass)
 	{
 	// generate texcoords based on the chosen texcoord source
-		switch(rsurface.texture->materialshaderpass->tcgen.tcgen)
+		q3tcgen_t tcgen2 = rsurface.texture->materialshaderpass->tcgen.tcgen;
+		if (tcgen2 == Q3TCGEN_ENVIRONMENT && !r_tcgen_environment.integer)
+			tcgen2 = Q3TCGEN_TEXTURE;
+		switch(tcgen2)
 		{
 		default:
 		case Q3TCGEN_TEXTURE:

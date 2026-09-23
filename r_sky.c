@@ -1,6 +1,24 @@
 
 #include "quakedef.h"
+#include "vr/vr_api.h"
 #include "image.h"
+
+// The sky is normally drawn first into a freshly-cleared buffer, NODEPTHTEST, constrained only
+// by a screen-space bounding-box scissor around the sky-touching surfaces (see skyscissor in
+// gl_rmain.c) - opaque world geometry drawn afterward is expected to naturally overdraw it.
+// That bounding box is a coarse approximation (not a per-pixel mask): on a typical desktop FOV
+// it rarely overlaps nearby opaque walls enough to be visible, but VR's much wider effective FOV
+// (union of both eyes, deliberately widened further for correct culling) makes that slop land on
+// nearby walls, reading as the sky bleeding through them (user-reported 2026-09-16, present on
+// multiple maps; every relevant cvar - r_reflectcube, r_water, r_tcgen_environment, entity/
+// frustum/PVS culling - was ruled out live before finding this). Fix: let the sky participate in
+// normal depth testing in VR instead of relying on the scissor approximation, so any opaque
+// geometry - regardless of draw order - correctly occludes it per-pixel.
+#ifdef VR_QUEST
+#define SKY_MATERIALFLAGS (MATERIALFLAG_SKY | MATERIALFLAG_FULLBRIGHT | MATERIALFLAG_NOCULLFACE | (VRH_Available() ? 0 : MATERIALFLAG_NODEPTHTEST))
+#else
+#define SKY_MATERIALFLAGS (MATERIALFLAG_SKY | MATERIALFLAG_FULLBRIGHT | MATERIALFLAG_NOCULLFACE | MATERIALFLAG_NODEPTHTEST)
+#endif
 
 // FIXME: fix skybox after vid_restart
 cvar_t r_sky = {CF_CLIENT | CF_ARCHIVE, "r_sky", "1", "enables sky rendering (black otherwise)"};
@@ -333,7 +351,7 @@ static void R_SkyBox(void)
 	rsurface.modelgeneratedvertex = false;
 	for (i = 0;i < 6;i++)
 		if(skyboxskinframe[i])
-			R_DrawCustomSurface(skyboxskinframe[i], &identitymatrix, MATERIALFLAG_SKY | MATERIALFLAG_FULLBRIGHT | MATERIALFLAG_NOCULLFACE | MATERIALFLAG_NODEPTHTEST, i*4, 4, i*2, 2, false, false, false);
+			R_DrawCustomSurface(skyboxskinframe[i], &identitymatrix, SKY_MATERIALFLAGS, i*4, 4, i*2, 2, false, false, false);
 }
 
 #define skygridx 32
@@ -421,8 +439,8 @@ static void R_SkySphere(void)
 	Matrix4x4_CreateTranslate(&scroll2matrix, speedscale, speedscale, 0);
 
 	RSurf_ActiveCustomEntity(&skymatrix, &skyinversematrix, 0, 0, 1, 1, 1, 1, skysphere_numverts, skysphere_vertex3f, skysphere_texcoord2f, NULL, NULL, NULL, NULL, skysphere_numtriangles, skysphere_element3i, skysphere_element3s, false, false);
-	R_DrawCustomSurface(r_refdef.scene.worldmodel->brush.solidskyskinframe, &scroll1matrix, MATERIALFLAG_SKY | MATERIALFLAG_FULLBRIGHT | MATERIALFLAG_NOCULLFACE | MATERIALFLAG_NODEPTHTEST                                            , 0, skysphere_numverts, 0, skysphere_numtriangles, false, false, false);
-	R_DrawCustomSurface(r_refdef.scene.worldmodel->brush.alphaskyskinframe, &scroll2matrix, MATERIALFLAG_SKY | MATERIALFLAG_FULLBRIGHT | MATERIALFLAG_NOCULLFACE | MATERIALFLAG_NODEPTHTEST | MATERIALFLAG_ALPHA | MATERIALFLAG_BLENDED, 0, skysphere_numverts, 0, skysphere_numtriangles, false, false, false);
+	R_DrawCustomSurface(r_refdef.scene.worldmodel->brush.solidskyskinframe, &scroll1matrix, SKY_MATERIALFLAGS                                    , 0, skysphere_numverts, 0, skysphere_numtriangles, false, false, false);
+	R_DrawCustomSurface(r_refdef.scene.worldmodel->brush.alphaskyskinframe, &scroll2matrix, SKY_MATERIALFLAGS | MATERIALFLAG_ALPHA | MATERIALFLAG_BLENDED, 0, skysphere_numverts, 0, skysphere_numtriangles, false, false, false);
 }
 
 void R_Sky(void)
